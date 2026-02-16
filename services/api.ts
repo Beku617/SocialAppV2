@@ -89,3 +89,14 @@ export {
   type ReelVisibility,
   type ReelLocalUploadPayload,
 } from "./reels";
+
+// Reel Comments
+export {
+  addReelComment,
+  deleteReelComment,
+  dislikeReelComment,
+  fetchReelComments,
+  likeReelComment,
+  type ReelComment as ReelCommentType,
+  type ReelCommentAuthor,
+} from "./reelComments";

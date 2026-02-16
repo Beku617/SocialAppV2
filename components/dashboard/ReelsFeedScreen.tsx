@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { Video, ResizeMode } from "expo-av";
+import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   Image,
@@ -22,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   deleteReel,
   fetchReels,
+  getUser,
   toggleReelLike,
   toggleReelSave,
   updateReel,
@@ -30,8 +32,10 @@ import {
   type ReelTab,
   type ReelVisibility,
 } from "../../services/api";
+import ReelCommentModal from "./ReelCommentModal";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const VIDEO_STRETCH_Y = 1.02;
 
 const nextVisibilityValue = (visibility: ReelVisibility): ReelVisibility => {
   if (visibility === "public") return "followers";
@@ -47,11 +51,12 @@ const formatCount = (count: number): string => {
   return String(count);
 };
 
+// ─── IG-style Action Button ─────────────────────────────────────────────
 function ActionButton({
   icon,
   label,
   color = "#fff",
-  size = 28,
+  size = 30,
   onPress,
 }: {
   icon: string;
@@ -62,7 +67,7 @@ function ActionButton({
 }) {
   return (
     <TouchableOpacity
-      style={{ alignItems: "center", marginBottom: 6 }}
+      style={{ alignItems: "center", marginBottom: 4 }}
       onPress={onPress}
       activeOpacity={0.75}
     >
@@ -72,8 +77,8 @@ function ActionButton({
           color: "#fff",
           fontSize: 12,
           fontWeight: "600",
-          marginTop: 4,
-          textShadowColor: "rgba(0,0,0,0.5)",
+          marginTop: 3,
+          textShadowColor: "rgba(0,0,0,0.6)",
           textShadowOffset: { width: 0, height: 1 },
           textShadowRadius: 3,
         }}
@@ -84,6 +89,7 @@ function ActionButton({
   );
 }
 
+// ─── Reel Item ──────────────────────────────────────────────────────────
 function ReelItem({
   reel,
   isActive,
@@ -91,6 +97,7 @@ function ReelItem({
   screenFocused,
   onToggleLike,
   onToggleSave,
+  onOpenComments,
 }: {
   reel: Reel;
   isActive: boolean;
@@ -98,19 +105,33 @@ function ReelItem({
   screenFocused: boolean;
   onToggleLike: (reelId: string) => void;
   onToggleSave: (reelId: string) => void;
+  onOpenComments: (reelId: string) => void;
 }) {
-  const bottomInfoOffset = Platform.OS === "ios" ? 4 : 2;
-  const actionsBottomOffset = bottomInfoOffset + 56;
+  const bottomInfoOffset = Platform.OS === "ios" ? 6 : 4;
+  const actionsBottomOffset = bottomInfoOffset + 60;
   const coverImage = reel.thumbUrl || "";
   const avatarUri =
     reel.author.avatarUrl ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(reel.author.name)}`;
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(reel.author.name)}&background=333&color=fff`;
 
   const videoRef = useRef<Video>(null);
   const [paused, setPaused] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [durationMs, setDurationMs] = useState(0);
+  const [positionMs, setPositionMs] = useState(0);
   const hasVideo = !!reel.playbackUrl;
+
+  // Fade animation for pause overlay
+  const pauseOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(pauseOpacity, {
+      toValue: paused ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [paused]);
 
   // Auto-play/pause based on whether reel is active AND screen is focused
   useEffect(() => {
@@ -124,12 +145,45 @@ function ReelItem({
 
   // Reset pause state when reel becomes active
   useEffect(() => {
-    if (isActive) setPaused(false);
+    if (isActive) {
+      setPaused(false);
+      setPositionMs(0);
+    }
   }, [isActive]);
 
   const togglePause = () => {
     if (!hasVideo) return;
     setPaused((prev) => !prev);
+  };
+
+  const handlePlaybackStatus = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return;
+    if (status.durationMillis) setDurationMs(status.durationMillis);
+    setPositionMs(status.positionMillis || 0);
+  };
+
+  const skipForward = async () => {
+    if (!videoRef.current || !durationMs) return;
+    const newPos = Math.min(positionMs + 3000, durationMs);
+    await videoRef.current.setPositionAsync(newPos);
+    setPositionMs(newPos);
+  };
+
+  const skipBackward = async () => {
+    if (!videoRef.current) return;
+    const newPos = Math.max(positionMs - 3000, 0);
+    await videoRef.current.setPositionAsync(newPos);
+    setPositionMs(newPos);
+  };
+
+  const progress = durationMs > 0 ? positionMs / durationMs : 0;
+
+  // Format seconds to mm:ss
+  const formatTime = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
   return (
@@ -157,10 +211,11 @@ function ReelItem({
             source={{ uri: reel.playbackUrl }}
             style={{
               width: "100%",
-              height: "100%",
-              transform: [{ scaleX: 1.15 }, { scaleY: 1.05 }],
+              height: "98%",
+              alignSelf: "center",
+              transform: [{ scaleY: VIDEO_STRETCH_Y }],
             }}
-            resizeMode={ResizeMode.COVER}
+            resizeMode={ResizeMode.CONTAIN}
             isLooping
             shouldPlay={isActive && !paused && screenFocused}
             isMuted={false}
@@ -168,9 +223,23 @@ function ReelItem({
             usePoster={!!coverImage}
             onLoad={() => setVideoLoaded(true)}
             onError={() => setVideoError(true)}
+            onPlaybackStatusUpdate={handlePlaybackStatus}
+            progressUpdateIntervalMillis={250}
           />
-          {/* Pause indicator */}
-          {paused && (
+
+          {/* Pause overlay with controls */}
+          <Animated.View
+            pointerEvents={paused ? "auto" : "none"}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              opacity: pauseOpacity,
+            }}
+          >
+            {/* Semi-transparent overlay */}
             <View
               style={{
                 position: "absolute",
@@ -178,24 +247,88 @@ function ReelItem({
                 left: 0,
                 right: 0,
                 bottom: 0,
+                backgroundColor: "rgba(0,0,0,0.3)",
+              }}
+            />
+
+            {/* Skip backward / Play / Skip forward */}
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
+                gap: 44,
               }}
             >
+              <TouchableOpacity
+                onPress={skipBackward}
+                style={{ alignItems: "center" }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="play-back"
+                  size={28}
+                  color="rgba(255,255,255,0.85)"
+                />
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.7)",
+                    fontSize: 10,
+                    fontWeight: "600",
+                    marginTop: 3,
+                  }}
+                >
+                  3s
+                </Text>
+              </TouchableOpacity>
+
               <View
                 style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 36,
-                  backgroundColor: "rgba(0,0,0,0.45)",
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  backgroundColor: "rgba(255,255,255,0.15)",
                   justifyContent: "center",
                   alignItems: "center",
                 }}
               >
-                <Ionicons name="play" size={34} color="#fff" />
+                <Ionicons
+                  name="play"
+                  size={32}
+                  color="#fff"
+                  style={{ marginLeft: 3 }}
+                />
               </View>
+
+              <TouchableOpacity
+                onPress={skipForward}
+                style={{ alignItems: "center" }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="play-forward"
+                  size={28}
+                  color="rgba(255,255,255,0.85)"
+                />
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.7)",
+                    fontSize: 10,
+                    fontWeight: "600",
+                    marginTop: 3,
+                  }}
+                >
+                  3s
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
+          </Animated.View>
+
           {/* Loading spinner while video loads */}
           {!videoLoaded && isActive && (
             <View
@@ -234,56 +367,87 @@ function ReelItem({
             alignItems: "center",
           }}
         >
-          <Ionicons name="film-outline" size={54} color="rgba(255,255,255,0.22)" />
+          <Ionicons
+            name="film-outline"
+            size={54}
+            color="rgba(255,255,255,0.22)"
+          />
         </View>
       )}
 
+      {/* Bottom gradient */}
       <LinearGradient
-        colors={["transparent", "rgba(0,0,0,0.3)", "rgba(0,0,0,0.75)"]}
+        colors={["transparent", "rgba(0,0,0,0.25)", "rgba(0,0,0,0.7)"]}
         style={{
           position: "absolute",
           bottom: 0,
           left: 0,
           right: 0,
-          height: 300,
+          height: 280,
         }}
+        pointerEvents="none"
       />
 
+      {/* Top gradient for header */}
+      <LinearGradient
+        colors={["rgba(0,0,0,0.4)", "transparent"]}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 120,
+        }}
+        pointerEvents="none"
+      />
+
+      {/* Right side action buttons — IG style */}
       <View
         style={{
           position: "absolute",
-          right: 12,
+          right: 10,
           bottom: actionsBottomOffset,
           alignItems: "center",
-          gap: 14,
+          gap: 16,
         }}
       >
         <ActionButton
           icon={reel.likedByMe ? "heart" : "heart-outline"}
           label={formatCount(reel.likesCount)}
           color={reel.likedByMe ? "#ef4444" : "#fff"}
+          size={30}
           onPress={() => onToggleLike(reel.id)}
         />
         <ActionButton
           icon="chatbubble-outline"
           label={formatCount(reel.commentsCount)}
+          size={28}
+          onPress={() => onOpenComments(reel.id)}
         />
         <ActionButton
           icon="repeat-outline"
           label={formatCount(reel.repostsCount)}
-          size={26}
+          size={28}
         />
         <ActionButton
           icon="paper-plane-outline"
           label={formatCount(reel.sharesCount)}
+          size={28}
         />
         <ActionButton
           icon={reel.savedByMe ? "bookmark" : "bookmark-outline"}
           label={formatCount(reel.savesCount)}
+          size={28}
           onPress={() => onToggleSave(reel.id)}
         />
+
+        {/* Three dots menu */}
+        <TouchableOpacity style={{ marginTop: 2 }} activeOpacity={0.7}>
+          <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+        </TouchableOpacity>
       </View>
 
+      {/* Bottom info area */}
       <View
         style={{
           position: "absolute",
@@ -292,11 +456,41 @@ function ReelItem({
           right: 70,
         }}
       >
+        {/* View responses pill */}
+        {reel.commentsCount > 0 && (
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: "rgba(255,255,255,0.18)",
+              borderRadius: 20,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+              alignSelf: "flex-start",
+              marginBottom: 10,
+              gap: 6,
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="list-outline" size={14} color="#fff" />
+            <Text
+              style={{
+                color: "#fff",
+                fontSize: 12.5,
+                fontWeight: "600",
+              }}
+            >
+              View · {formatCount(reel.commentsCount)} responses
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Author row */}
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
-            marginBottom: 10,
+            marginBottom: 8,
           }}
         >
           <Image
@@ -310,6 +504,7 @@ function ReelItem({
               marginRight: 10,
             }}
           />
+
           <Text
             style={{
               color: "#fff",
@@ -318,34 +513,39 @@ function ReelItem({
               textShadowColor: "rgba(0,0,0,0.6)",
               textShadowOffset: { width: 0, height: 1 },
               textShadowRadius: 3,
-              flex: 1,
             }}
             numberOfLines={1}
           >
             {reel.author.name}
           </Text>
-          <TouchableOpacity
-            style={{
-              marginLeft: 12,
-              borderWidth: 1.5,
-              borderColor: "#fff",
-              borderRadius: 8,
-              paddingHorizontal: 14,
-              paddingVertical: 5,
-            }}
-          >
-            <Text
+
+          {/* Follow button — IG style rounded */}
+          {!reel.ownedByMe && (
+            <TouchableOpacity
               style={{
-                color: "#fff",
-                fontSize: 13,
-                fontWeight: "700",
+                marginLeft: 10,
+                borderWidth: 1.5,
+                borderColor: "#fff",
+                borderRadius: 8,
+                paddingHorizontal: 16,
+                paddingVertical: 5,
               }}
+              activeOpacity={0.7}
             >
-              Follow
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={{
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: "700",
+                }}
+              >
+                Follow
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
+        {/* Caption */}
         <Text
           style={{
             color: "#fff",
@@ -355,14 +555,22 @@ function ReelItem({
             textShadowColor: "rgba(0,0,0,0.6)",
             textShadowOffset: { width: 0, height: 1 },
             textShadowRadius: 3,
-            marginBottom: 10,
+            marginBottom: 6,
           }}
           numberOfLines={2}
         >
-          {reel.caption || "No caption"}
+          {reel.caption || ""}
         </Text>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        {/* Music / audio row */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 4,
+          }}
+        >
           <Ionicons name="musical-note" size={13} color="#fff" />
           <Text
             style={{
@@ -372,17 +580,93 @@ function ReelItem({
               textShadowColor: "rgba(0,0,0,0.6)",
               textShadowOffset: { width: 0, height: 1 },
               textShadowRadius: 3,
+              flex: 1,
             }}
             numberOfLines={1}
           >
             {reel.music || "Original audio"}
           </Text>
+
+          {/* Album art thumbnail — bottom right */}
         </View>
       </View>
+
+      {/* Album art / reel thumbnail — bottom right corner */}
+      {coverImage ? (
+        <View
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: bottomInfoOffset + 4,
+            width: 32,
+            height: 32,
+            borderRadius: 6,
+            borderWidth: 1.5,
+            borderColor: "rgba(255,255,255,0.5)",
+            overflow: "hidden",
+          }}
+        >
+          <Image
+            source={{ uri: coverImage }}
+            style={{ width: "100%", height: "100%" }}
+            resizeMode="cover"
+          />
+        </View>
+      ) : null}
+
+      {/* Progress bar — visible only when paused */}
+      {hasVideo && durationMs > 0 && paused && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            opacity: pauseOpacity,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingHorizontal: 14,
+              marginBottom: 4,
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>
+              {formatTime(positionMs)}
+            </Text>
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.5)",
+                fontSize: 11,
+                fontWeight: "600",
+              }}
+            >
+              {formatTime(durationMs)}
+            </Text>
+          </View>
+          <View
+            style={{
+              height: 3,
+              backgroundColor: "rgba(255,255,255,0.25)",
+            }}
+          >
+            <View
+              style={{
+                width: `${Math.min(progress * 100, 100)}%`,
+                height: "100%",
+                backgroundColor: "#fff",
+              }}
+            />
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
 
+// ─── Reels Feed Screen ──────────────────────────────────────────────────
 export default function ReelsFeedScreen() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -391,6 +675,26 @@ export default function ReelsFeedScreen() {
   const [listHeight, setListHeight] = useState(SCREEN_HEIGHT);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Comment modal state
+  const [commentReelId, setCommentReelId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name: string; avatarUrl: string } | null>(null);
+
+  useEffect(() => {
+    getUser().then((u) => {
+      if (u) setCurrentUser({ name: u.name, avatarUrl: u.avatarUrl || "" });
+    });
+  }, []);
+
+  const openComments = (reelId: string) => setCommentReelId(reelId);
+  const closeComments = () => setCommentReelId(null);
+
+  const handleCommentsCountChange = (count: number) => {
+    if (!commentReelId) return;
+    setReels((prev) =>
+      prev.map((r) => (r.id === commentReelId ? { ...r, commentsCount: count } : r)),
+    );
+  };
 
   const viewedReelIds = useRef<Set<string>>(new Set());
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
@@ -409,26 +713,23 @@ export default function ReelsFeedScreen() {
     }
   };
 
-  const loadReels = useCallback(
-    async () => {
-      setLoading(true);
-      const first = await fetchReels(activeTab);
-      if (first.error) {
-        setReels([]);
-        setLoading(false);
-        Alert.alert("Reels", first.error);
-        return;
-      }
-
-      const next = first.data || [];
-      setReels(next);
-      setActiveIndex((prev) =>
-        next.length ? Math.min(prev, next.length - 1) : 0,
-      );
+  const loadReels = useCallback(async () => {
+    setLoading(true);
+    const first = await fetchReels(activeTab);
+    if (first.error) {
+      setReels([]);
       setLoading(false);
-    },
-    [activeTab],
-  );
+      Alert.alert("Reels", first.error);
+      return;
+    }
+
+    const next = first.data || [];
+    setReels(next);
+    setActiveIndex((prev) =>
+      next.length ? Math.min(prev, next.length - 1) : 0,
+    );
+    setLoading(false);
+  }, [activeTab]);
 
   useEffect(() => {
     viewedReelIds.current.clear();
@@ -444,7 +745,10 @@ export default function ReelsFeedScreen() {
       setReels((prev) =>
         prev.map((reel) =>
           reel.id === current.id
-            ? { ...reel, viewsCount: result.data?.viewsCount ?? reel.viewsCount }
+            ? {
+                ...reel,
+                viewsCount: result.data?.viewsCount ?? reel.viewsCount,
+              }
             : reel,
         ),
       );
@@ -486,7 +790,9 @@ export default function ReelsFeedScreen() {
   const openManageMenu = () => {
     const current = reels[activeIndex];
     if (!current) {
-      Alert.alert("Manage Reels", "No reel selected.", [{ text: "Close", style: "cancel" }]);
+      Alert.alert("Manage Reels", "No reel selected.", [
+        { text: "Close", style: "cancel" },
+      ]);
       return;
     }
 
@@ -498,7 +804,10 @@ export default function ReelsFeedScreen() {
               const next = nextVisibilityValue(current.visibility);
               const result = await updateReel(current.id, { visibility: next });
               if (!result.data) {
-                Alert.alert("Manage Reels", result.error || "Failed to update visibility");
+                Alert.alert(
+                  "Manage Reels",
+                  result.error || "Failed to update visibility",
+                );
                 return;
               }
               setReels((prev) =>
@@ -514,7 +823,10 @@ export default function ReelsFeedScreen() {
             onPress: async () => {
               const result = await deleteReel(current.id);
               if (!result.data) {
-                Alert.alert("Manage Reels", result.error || "Failed to delete reel");
+                Alert.alert(
+                  "Manage Reels",
+                  result.error || "Failed to delete reel",
+                );
                 return;
               }
               setReels((prev) => prev.filter((reel) => reel.id !== current.id));
@@ -535,7 +847,9 @@ export default function ReelsFeedScreen() {
       <StatusBar barStyle="light-content" />
 
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
           <ActivityIndicator size="large" color="#fff" />
           <Text style={{ marginTop: 10, color: "#d1d5db", fontSize: 13 }}>
             Loading reels...
@@ -553,6 +867,7 @@ export default function ReelsFeedScreen() {
               screenFocused={isFocused}
               onToggleLike={handleToggleLike}
               onToggleSave={handleToggleSave}
+              onOpenComments={openComments}
             />
           )}
           pagingEnabled
@@ -568,7 +883,13 @@ export default function ReelsFeedScreen() {
             index,
           })}
           ListEmptyComponent={
-            <View style={{ height: listHeight, alignItems: "center", justifyContent: "center" }}>
+            <View
+              style={{
+                height: listHeight,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <Ionicons name="videocam-outline" size={48} color="#d1d5db" />
               <Text style={{ marginTop: 10, color: "#fff", fontWeight: "700" }}>
                 No reels yet
@@ -594,20 +915,23 @@ export default function ReelsFeedScreen() {
                   borderRadius: 12,
                 }}
               >
-                <Text style={{ color: "#fff", fontWeight: "700" }}>Go to Home (+)</Text>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                  Go to Home (+)
+                </Text>
               </TouchableOpacity>
             </View>
           }
         />
       )}
 
+      {/* IG-style top header overlay */}
       <View
         style={{
           position: "absolute",
           top: 0,
           left: 0,
           right: 0,
-          paddingTop: insets.top + 8,
+          paddingTop: insets.top + 6,
           paddingHorizontal: 16,
           paddingBottom: 12,
           flexDirection: "row",
@@ -615,16 +939,23 @@ export default function ReelsFeedScreen() {
           alignItems: "center",
         }}
       >
-        <View style={{ width: 28 }} />
+        {/* Left: + add reel */}
+        <TouchableOpacity
+          onPress={() => router.push("/create-reel")}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={30} color="#fff" />
+        </TouchableOpacity>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
+        {/* Center: Reels / Friends tabs */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 22 }}>
           <TouchableOpacity onPress={() => setActiveTab("reels")}>
             <Text
               style={{
-                fontSize: 17,
+                fontSize: 19,
                 fontWeight: activeTab === "reels" ? "800" : "600",
                 color: "#fff",
-                opacity: activeTab === "reels" ? 1 : 0.6,
+                opacity: activeTab === "reels" ? 1 : 0.55,
               }}
             >
               Reels
@@ -633,10 +964,10 @@ export default function ReelsFeedScreen() {
           <TouchableOpacity onPress={() => setActiveTab("friends")}>
             <Text
               style={{
-                fontSize: 17,
+                fontSize: 19,
                 fontWeight: activeTab === "friends" ? "800" : "600",
                 color: "#fff",
-                opacity: activeTab === "friends" ? 1 : 0.6,
+                opacity: activeTab === "friends" ? 1 : 0.55,
               }}
             >
               Friends
@@ -644,10 +975,29 @@ export default function ReelsFeedScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity onPress={openManageMenu}>
-          <Ionicons name="options-outline" size={24} color="#fff" />
+        {/* Right: sparkle / manage */}
+        <TouchableOpacity onPress={openManageMenu} activeOpacity={0.7}>
+          <Ionicons name="sparkles-outline" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* Comment Modal */}
+      {commentReelId && (() => {
+        const commentReel = reels.find((r) => r.id === commentReelId);
+        return (
+          <ReelCommentModal
+            visible={!!commentReelId}
+            onClose={closeComments}
+            reelId={commentReelId}
+            likesCount={commentReel?.likesCount || 0}
+            sharesCount={commentReel?.sharesCount || 0}
+            currentUserName={currentUser?.name || "You"}
+            currentUserAvatar={currentUser?.avatarUrl || ""}
+            reelAuthorId={commentReel?.author.id || ""}
+            onCommentsCountChange={handleCommentsCountChange}
+          />
+        );
+      })()}
     </View>
   );
 }

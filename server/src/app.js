@@ -11,6 +11,7 @@ const postRoutes = require("./routes/postRoutes");
 const storyRoutes = require("./routes/storyRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const reelRoutes = require("./routes/reelRoutes");
+const reelCommentRoutes = require("./routes/reelCommentRoutes");
 const { errorHandler, notFound } = require("./middlewares/errorHandler");
 
 const app = express();
@@ -55,6 +56,7 @@ app.use("/api/posts", postRoutes);
 app.use("/api/stories", storyRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/reels", reelRoutes);
+app.use("/api/reels", reelCommentRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
