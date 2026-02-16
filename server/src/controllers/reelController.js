@@ -77,7 +77,26 @@ const toIdString = (value) => {
 const arrayHasUser = (values, userId) =>
   Array.isArray(values) && values.some((value) => toIdString(value) === userId);
 
-const mapReel = (reel, currentUserId) => {
+/**
+ * Rebuild a local /uploads/ URL so it always uses the *current* request host.
+ * External URLs (e.g. samplelib.com) are returned unchanged.
+ */
+const resolveLocalUrl = (url, storageKey, req) => {
+  // If there is a storageKey that lives under our uploads folder, always
+  // build the URL from the current request so it survives IP changes.
+  if (
+    storageKey &&
+    storageKey.startsWith("reels/") &&
+    !storageKey.startsWith("reels/demo/")
+  ) {
+    const protocol = req.protocol || "http";
+    const host = req.get("host");
+    return `${protocol}://${host}/uploads/${storageKey}`;
+  }
+  return url || "";
+};
+
+const mapReel = (reel, currentUserId, req) => {
   const authorId = toIdString(reel.author);
   const authorName = reel.author?.name || "Unknown";
   const authorAvatar = reel.author?.avatarUrl || "";
@@ -91,6 +110,8 @@ const mapReel = (reel, currentUserId) => {
     ? reel.viewsCount
     : reel.viewers?.length || 0;
 
+  const storageKey = reel.storageKey || "";
+
   return {
     id: reel._id.toString(),
     author: {
@@ -100,9 +121,13 @@ const mapReel = (reel, currentUserId) => {
     },
     caption: reel.caption || "",
     music: reel.music || "",
-    storageKey: reel.storageKey || "",
-    originalUrl: reel.originalUrl || "",
-    playbackUrl: reel.playbackUrl || "",
+    storageKey,
+    originalUrl: req
+      ? resolveLocalUrl(reel.originalUrl, storageKey, req)
+      : reel.originalUrl || "",
+    playbackUrl: req
+      ? resolveLocalUrl(reel.playbackUrl, storageKey, req)
+      : reel.playbackUrl || "",
     thumbUrl: reel.thumbUrl || "",
     duration: reel.duration || 0,
     width: reel.width || 0,
@@ -136,7 +161,9 @@ const normalizeVisibility = (value) => {
 
 const buildStorageKey = ({ userId, reelId, fileName, mimeType }) => {
   const safeName =
-    typeof fileName === "string" && fileName.trim() ? fileName.trim() : "original";
+    typeof fileName === "string" && fileName.trim()
+      ? fileName.trim()
+      : "original";
   const parsed = path.parse(safeName);
   const extensionFromName = parsed.ext?.replace(".", "");
   const extensionFromMime =
@@ -168,7 +195,9 @@ const listReels = async (req, res, next) => {
         $or: [
           { author: req.user._id },
           {
-            author: { $in: followingIds.map((id) => new mongoose.Types.ObjectId(id)) },
+            author: {
+              $in: followingIds.map((id) => new mongoose.Types.ObjectId(id)),
+            },
             visibility: { $in: ["public", "followers"] },
           },
         ],
@@ -179,7 +208,9 @@ const listReels = async (req, res, next) => {
           { author: req.user._id },
           { visibility: "public" },
           {
-            author: { $in: followingIds.map((id) => new mongoose.Types.ObjectId(id)) },
+            author: {
+              $in: followingIds.map((id) => new mongoose.Types.ObjectId(id)),
+            },
             visibility: "followers",
           },
         ],
@@ -196,7 +227,7 @@ const listReels = async (req, res, next) => {
       .populate("author", "name avatarUrl");
 
     return res.status(200).json({
-      reels: reels.map((reel) => mapReel(reel, currentUserId)),
+      reels: reels.map((reel) => mapReel(reel, currentUserId, req)),
     });
   } catch (error) {
     return next(error);
@@ -212,7 +243,7 @@ const listMyReels = async (req, res, next) => {
       .populate("author", "name avatarUrl");
 
     return res.status(200).json({
-      reels: reels.map((reel) => mapReel(reel, currentUserId)),
+      reels: reels.map((reel) => mapReel(reel, currentUserId, req)),
     });
   } catch (error) {
     return next(error);
@@ -221,8 +252,10 @@ const listMyReels = async (req, res, next) => {
 
 const initiateUpload = async (req, res, next) => {
   try {
-    const caption = typeof req.body.caption === "string" ? req.body.caption.trim() : "";
-    const music = typeof req.body.music === "string" ? req.body.music.trim() : "";
+    const caption =
+      typeof req.body.caption === "string" ? req.body.caption.trim() : "";
+    const music =
+      typeof req.body.music === "string" ? req.body.music.trim() : "";
     const visibility = normalizeVisibility(req.body.visibility);
     const fileName = req.body.fileName;
     const mimeType = req.body.mimeType;
@@ -249,7 +282,7 @@ const initiateUpload = async (req, res, next) => {
     const uploadUrl = buildUploadUrl(storageKey);
 
     return res.status(201).json({
-      reel: mapReel(reel, req.user._id.toString()),
+      reel: mapReel(reel, req.user._id.toString(), req),
       upload: {
         storageKey,
         method: "PUT",
@@ -270,7 +303,10 @@ const initiateUpload = async (req, res, next) => {
 const completeUpload = async (req, res, next) => {
   try {
     const { reelId } = req.params;
-    const reel = await Reel.findById(reelId).populate("author", "name avatarUrl");
+    const reel = await Reel.findById(reelId).populate(
+      "author",
+      "name avatarUrl",
+    );
 
     if (!reel) {
       throw createHttpError(404, "Reel not found");
@@ -282,7 +318,9 @@ const completeUpload = async (req, res, next) => {
     const storageKey =
       typeof req.body.storageKey === "string" ? req.body.storageKey.trim() : "";
     const originalUrl =
-      typeof req.body.originalUrl === "string" ? req.body.originalUrl.trim() : "";
+      typeof req.body.originalUrl === "string"
+        ? req.body.originalUrl.trim()
+        : "";
 
     if (storageKey) {
       reel.storageKey = storageKey;
@@ -295,7 +333,7 @@ const completeUpload = async (req, res, next) => {
     await reel.save();
 
     return res.status(200).json({
-      reel: mapReel(reel, req.user._id.toString()),
+      reel: mapReel(reel, req.user._id.toString(), req),
     });
   } catch (error) {
     return next(error);
@@ -305,7 +343,10 @@ const completeUpload = async (req, res, next) => {
 const markReady = async (req, res, next) => {
   try {
     const { reelId } = req.params;
-    const reel = await Reel.findById(reelId).populate("author", "name avatarUrl");
+    const reel = await Reel.findById(reelId).populate(
+      "author",
+      "name avatarUrl",
+    );
 
     if (!reel) {
       throw createHttpError(404, "Reel not found");
@@ -316,13 +357,20 @@ const markReady = async (req, res, next) => {
 
     reel.playbackUrl = req.body.playbackUrl.trim();
     reel.thumbUrl =
-      typeof req.body.thumbUrl === "string" ? req.body.thumbUrl.trim() : reel.thumbUrl;
+      typeof req.body.thumbUrl === "string"
+        ? req.body.thumbUrl.trim()
+        : reel.thumbUrl;
     reel.duration = Number.isFinite(req.body.duration)
       ? Number(req.body.duration)
       : reel.duration;
-    reel.width = Number.isFinite(req.body.width) ? Number(req.body.width) : reel.width;
-    reel.height = Number.isFinite(req.body.height) ? Number(req.body.height) : reel.height;
-    reel.music = typeof req.body.music === "string" ? req.body.music.trim() : reel.music;
+    reel.width = Number.isFinite(req.body.width)
+      ? Number(req.body.width)
+      : reel.width;
+    reel.height = Number.isFinite(req.body.height)
+      ? Number(req.body.height)
+      : reel.height;
+    reel.music =
+      typeof req.body.music === "string" ? req.body.music.trim() : reel.music;
 
     reel.status = "ready";
     reel.failureReason = "";
@@ -331,7 +379,7 @@ const markReady = async (req, res, next) => {
     await reel.save();
 
     return res.status(200).json({
-      reel: mapReel(reel, req.user._id.toString()),
+      reel: mapReel(reel, req.user._id.toString(), req),
     });
   } catch (error) {
     return next(error);
@@ -341,7 +389,10 @@ const markReady = async (req, res, next) => {
 const uploadLocalVideo = async (req, res, next) => {
   try {
     const { reelId } = req.params;
-    const reel = await Reel.findById(reelId).populate("author", "name avatarUrl");
+    const reel = await Reel.findById(reelId).populate(
+      "author",
+      "name avatarUrl",
+    );
 
     if (!reel) {
       throw createHttpError(404, "Reel not found");
@@ -350,7 +401,8 @@ const uploadLocalVideo = async (req, res, next) => {
       throw createHttpError(403, "You can manage only your own reels");
     }
 
-    const rawBase64 = typeof req.body.base64Data === "string" ? req.body.base64Data : "";
+    const rawBase64 =
+      typeof req.body.base64Data === "string" ? req.body.base64Data : "";
     if (!rawBase64) {
       throw createHttpError(400, "base64Data is required");
     }
@@ -398,7 +450,7 @@ const uploadLocalVideo = async (req, res, next) => {
     return res.status(200).json({
       storageKey,
       videoUrl,
-      reel: mapReel(reel, req.user._id.toString()),
+      reel: mapReel(reel, req.user._id.toString(), req),
     });
   } catch (error) {
     return next(error);
@@ -408,7 +460,10 @@ const uploadLocalVideo = async (req, res, next) => {
 const markFailed = async (req, res, next) => {
   try {
     const { reelId } = req.params;
-    const reel = await Reel.findById(reelId).populate("author", "name avatarUrl");
+    const reel = await Reel.findById(reelId).populate(
+      "author",
+      "name avatarUrl",
+    );
 
     if (!reel) {
       throw createHttpError(404, "Reel not found");
@@ -418,14 +473,16 @@ const markFailed = async (req, res, next) => {
     }
 
     const failureReason =
-      typeof req.body.failureReason === "string" ? req.body.failureReason.trim() : "";
+      typeof req.body.failureReason === "string"
+        ? req.body.failureReason.trim()
+        : "";
 
     reel.status = "failed";
     reel.failureReason = failureReason || "Processing failed";
     await reel.save();
 
     return res.status(200).json({
-      reel: mapReel(reel, req.user._id.toString()),
+      reel: mapReel(reel, req.user._id.toString(), req),
     });
   } catch (error) {
     return next(error);
@@ -435,7 +492,10 @@ const markFailed = async (req, res, next) => {
 const updateReel = async (req, res, next) => {
   try {
     const { reelId } = req.params;
-    const reel = await Reel.findById(reelId).populate("author", "name avatarUrl");
+    const reel = await Reel.findById(reelId).populate(
+      "author",
+      "name avatarUrl",
+    );
 
     if (!reel) {
       throw createHttpError(404, "Reel not found");
@@ -460,7 +520,7 @@ const updateReel = async (req, res, next) => {
     await reel.save();
 
     return res.status(200).json({
-      reel: mapReel(reel, req.user._id.toString()),
+      reel: mapReel(reel, req.user._id.toString(), req),
     });
   } catch (error) {
     return next(error);
@@ -583,10 +643,16 @@ const seedReels = async (req, res, next) => {
 
     const users = await User.find().select("_id").limit(10).lean();
     if (!users.length) {
-      throw createHttpError(400, "Create at least one user before seeding reels");
+      throw createHttpError(
+        400,
+        "Create at least one user before seeding reels",
+      );
     }
 
-    const authorIds = [req.user._id.toString(), ...users.map((u) => u._id.toString())];
+    const authorIds = [
+      req.user._id.toString(),
+      ...users.map((u) => u._id.toString()),
+    ];
     const uniqueAuthorIds = [...new Set(authorIds)];
 
     const reelsToInsert = DEMO_REELS.map((item, index) => ({

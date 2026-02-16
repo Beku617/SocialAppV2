@@ -66,21 +66,25 @@ export default function DashboardLayout() {
     <DashboardTabs
       screenOptions={({ route }) => {
         const isReelsTab = route.name === "videos";
+        const isMessagesTab = route.name === "messages";
+        const isDarkTab = isReelsTab || isMessagesTab;
 
         return {
           headerShown: false,
-          tabBarActiveTintColor: isReelsTab ? "#ffffff" : "#4f46e5",
-          tabBarInactiveTintColor: isReelsTab ? "rgba(255,255,255,0.7)" : "#9ca3af",
+          tabBarActiveTintColor: isDarkTab ? "#ffffff" : "#4f46e5",
+          tabBarInactiveTintColor: isDarkTab
+            ? "rgba(255,255,255,0.7)"
+            : "#9ca3af",
           tabBarShowLabel: false,
           tabBarItemStyle: {
             flex: 1,
           },
           tabBarStyle: {
-            backgroundColor: isReelsTab ? "#050814" : "#ffffff",
+            backgroundColor: isDarkTab ? "#000000" : "#ffffff",
             borderTopWidth: 1,
-            borderTopColor: isReelsTab ? "rgba(255,255,255,0.16)" : "#f3f4f6",
-            height: (isReelsTab ? 50 : 52) + bottomInset,
-            paddingTop: isReelsTab ? 4 : 6,
+            borderTopColor: isDarkTab ? "rgba(255,255,255,0.12)" : "#f3f4f6",
+            height: (isDarkTab ? 50 : 52) + bottomInset,
+            paddingTop: isDarkTab ? 4 : 6,
             paddingBottom: bottomInset,
             elevation: 0,
             shadowOpacity: 0,

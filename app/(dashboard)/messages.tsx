@@ -7,21 +7,44 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import UserProfileModal from "../../components/dashboard/UserProfileModal";
 import {
+  sendMessage as apiSendMessage,
   getConversations,
   getMe,
   getMessages,
   searchUsers,
-  sendMessage as apiSendMessage,
+  toggleFollow,
   type ChatMessage,
   type ConversationItem,
+  type SearchUserResult,
+  type UserProfile,
 } from "../../services/api";
+
+// ─── IG Dark Theme Colors ───────────────────────────────────────────────
+const COLORS = {
+  bg: "#000000",
+  surface: "#121212",
+  card: "#1a1a1a",
+  searchBg: "#262626",
+  text: "#ffffff",
+  textSecondary: "#a8a8a8",
+  textMuted: "#737373",
+  accent: "#3797f0",
+  border: "#262626",
+  online: "#2ecc71",
+  unread: "#3797f0",
+  bubbleMe: "#3797f0",
+  bubbleOther: "#262626",
+  inputBg: "#262626",
+};
 
 // ─── Chat Screen ────────────────────────────────────────────────────────
 function ChatScreen({
@@ -30,12 +53,14 @@ function ChatScreen({
   userAvatar,
   currentUserId,
   onBack,
+  onViewProfile,
 }: {
   userId: string;
   userName: string;
   userAvatar: string;
   currentUserId: string | null;
   onBack: () => void;
+  onViewProfile: (userId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -120,7 +145,7 @@ function ChatScreen({
               source={{
                 uri:
                   userAvatar ||
-                  `https://ui-avatars.com/api/?name=${userName}`,
+                  `https://ui-avatars.com/api/?name=${userName}&background=333&color=fff`,
               }}
               style={{
                 width: 28,
@@ -132,7 +157,7 @@ function ChatScreen({
             <View>
               <View
                 style={{
-                  backgroundColor: "#f3f4f6",
+                  backgroundColor: COLORS.bubbleOther,
                   borderRadius: 20,
                   borderBottomLeftRadius: 4,
                   paddingHorizontal: 14,
@@ -140,7 +165,7 @@ function ChatScreen({
                 }}
               >
                 <Text
-                  style={{ fontSize: 15, color: "#111827", lineHeight: 20 }}
+                  style={{ fontSize: 15, color: COLORS.text, lineHeight: 20 }}
                 >
                   {item.text}
                 </Text>
@@ -148,7 +173,7 @@ function ChatScreen({
               <Text
                 style={{
                   fontSize: 10,
-                  color: "#9ca3af",
+                  color: COLORS.textMuted,
                   marginTop: 3,
                   marginLeft: 4,
                 }}
@@ -162,7 +187,7 @@ function ChatScreen({
           <View>
             <View
               style={{
-                backgroundColor: "#4f46e5",
+                backgroundColor: COLORS.bubbleMe,
                 borderRadius: 20,
                 borderBottomRightRadius: 4,
                 paddingHorizontal: 14,
@@ -176,7 +201,7 @@ function ChatScreen({
             <Text
               style={{
                 fontSize: 10,
-                color: "#9ca3af",
+                color: COLORS.textMuted,
                 marginTop: 3,
                 alignSelf: "flex-end",
                 marginRight: 4,
@@ -193,7 +218,7 @@ function ChatScreen({
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#fff" }}
+      style={{ flex: 1, backgroundColor: COLORS.bg }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {/* Chat Header */}
@@ -204,67 +229,48 @@ function ChatScreen({
           paddingBottom: 14,
           flexDirection: "row",
           alignItems: "center",
-          backgroundColor: "#fff",
-          borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          backgroundColor: COLORS.bg,
+          borderBottomWidth: 0.5,
+          borderBottomColor: COLORS.border,
           gap: 12,
         }}
       >
-        <TouchableOpacity
-          onPress={onBack}
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 19,
-            backgroundColor: "#f3f4f6",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Ionicons name="chevron-back" size={20} color="#374151" />
+        <TouchableOpacity onPress={onBack} style={{ padding: 4 }}>
+          <Ionicons name="chevron-back" size={28} color={COLORS.text} />
         </TouchableOpacity>
 
-        <Image
-          source={{
-            uri:
-              userAvatar ||
-              `https://ui-avatars.com/api/?name=${userName}`,
-          }}
-          style={{ width: 40, height: 40, borderRadius: 20 }}
-        />
+        <TouchableOpacity
+          onPress={() => onViewProfile(userId)}
+          activeOpacity={0.7}
+        >
+          <Image
+            source={{
+              uri:
+                userAvatar ||
+                `https://ui-avatars.com/api/?name=${userName}&background=333&color=fff`,
+            }}
+            style={{ width: 36, height: 36, borderRadius: 18 }}
+          />
+        </TouchableOpacity>
 
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#111827" }}>
+        <TouchableOpacity
+          onPress={() => onViewProfile(userId)}
+          style={{ flex: 1 }}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 16, fontWeight: "700", color: COLORS.text }}>
             {userName}
           </Text>
-          <Text style={{ fontSize: 12, color: "#22c55e", fontWeight: "500" }}>
+          <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>
             Active now
           </Text>
-        </View>
-
-        <TouchableOpacity
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 19,
-            backgroundColor: "#f3f4f6",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Ionicons name="call-outline" size={18} color="#374151" />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 19,
-            backgroundColor: "#f3f4f6",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Ionicons name="videocam-outline" size={18} color="#374151" />
+
+        <TouchableOpacity style={{ padding: 6 }}>
+          <Ionicons name="call-outline" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+        <TouchableOpacity style={{ padding: 6 }}>
+          <Ionicons name="videocam-outline" size={24} color={COLORS.text} />
         </TouchableOpacity>
       </View>
 
@@ -273,7 +279,7 @@ function ChatScreen({
         <View
           style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
         >
-          <ActivityIndicator size="large" color="#4f46e5" />
+          <ActivityIndicator size="large" color={COLORS.accent} />
         </View>
       ) : (
         <FlatList
@@ -293,7 +299,7 @@ function ChatScreen({
                   width: 80,
                   height: 80,
                   borderRadius: 40,
-                  backgroundColor: "#f0f0ff",
+                  backgroundColor: COLORS.card,
                   justifyContent: "center",
                   alignItems: "center",
                   marginBottom: 16,
@@ -302,18 +308,18 @@ function ChatScreen({
                 <Ionicons
                   name="hand-right-outline"
                   size={36}
-                  color="#4f46e5"
+                  color={COLORS.accent}
                 />
               </View>
               <Text
-                style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}
+                style={{ fontSize: 18, fontWeight: "700", color: COLORS.text }}
               >
                 Say hello!
               </Text>
               <Text
                 style={{
                   fontSize: 14,
-                  color: "#9ca3af",
+                  color: COLORS.textSecondary,
                   marginTop: 6,
                   textAlign: "center",
                 }}
@@ -336,9 +342,9 @@ function ChatScreen({
           paddingHorizontal: 14,
           paddingTop: 10,
           paddingBottom: insets.bottom + 10,
-          backgroundColor: "#fff",
-          borderTopWidth: 1,
-          borderTopColor: "#f3f4f6",
+          backgroundColor: COLORS.bg,
+          borderTopWidth: 0.5,
+          borderTopColor: COLORS.border,
           gap: 10,
         }}
       >
@@ -347,28 +353,29 @@ function ChatScreen({
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: "#f3f4f6",
             justifyContent: "center",
             alignItems: "center",
           }}
         >
-          <Ionicons name="camera-outline" size={20} color="#4f46e5" />
+          <Ionicons name="camera-outline" size={24} color={COLORS.accent} />
         </TouchableOpacity>
 
         <View
           style={{
             flex: 1,
-            backgroundColor: "#f3f4f6",
+            backgroundColor: COLORS.inputBg,
             borderRadius: 22,
+            borderWidth: 1,
+            borderColor: COLORS.border,
             paddingHorizontal: 16,
             paddingVertical: Platform.OS === "ios" ? 10 : 6,
             maxHeight: 120,
           }}
         >
           <TextInput
-            style={{ fontSize: 15, color: "#111827", maxHeight: 100 }}
+            style={{ fontSize: 15, color: COLORS.text, maxHeight: 100 }}
             placeholder="Message..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={COLORS.textMuted}
             value={text}
             onChangeText={setText}
             multiline
@@ -383,42 +390,39 @@ function ChatScreen({
               width: 40,
               height: 40,
               borderRadius: 20,
-              backgroundColor: sending ? "#c7d2fe" : "#4f46e5",
               justifyContent: "center",
               alignItems: "center",
             }}
           >
             {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={COLORS.accent} />
             ) : (
-              <Ionicons name="send" size={17} color="#fff" />
+              <Ionicons name="send" size={22} color={COLORS.accent} />
             )}
           </TouchableOpacity>
         ) : (
-          <View style={{ flexDirection: "row", gap: 4 }}>
+          <View style={{ flexDirection: "row", gap: 2 }}>
             <TouchableOpacity
               style={{
                 width: 40,
                 height: 40,
                 borderRadius: 20,
-                backgroundColor: "#f3f4f6",
                 justifyContent: "center",
                 alignItems: "center",
               }}
             >
-              <Ionicons name="mic-outline" size={20} color="#4f46e5" />
+              <Ionicons name="mic-outline" size={24} color={COLORS.text} />
             </TouchableOpacity>
             <TouchableOpacity
               style={{
                 width: 40,
                 height: 40,
                 borderRadius: 20,
-                backgroundColor: "#f3f4f6",
                 justifyContent: "center",
                 alignItems: "center",
               }}
             >
-              <Ionicons name="image-outline" size={20} color="#4f46e5" />
+              <Ionicons name="image-outline" size={24} color={COLORS.text} />
             </TouchableOpacity>
           </View>
         )}
@@ -427,15 +431,41 @@ function ChatScreen({
   );
 }
 
-// ─── Messages Tab Screen ────────────────────────────────────────────────
+// ─── Helper: format relative activity time ──────────────────────────────
+function formatActivityTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return "Active now";
+  if (diffMins < 60) return `Active ${diffMins}m ago`;
+  if (diffHours < 24) return `Active ${diffHours}h ago`;
+  if (diffDays === 1) return "Active yesterday";
+  if (diffDays < 7) return `Active ${diffDays}d ago`;
+  return `Active ${d.toLocaleDateString([], { month: "short", day: "numeric" })}`;
+}
+
+// ─── Messages Tab Screen (IG Style) ─────────────────────────────────────
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const [activeTab, setActiveTab] = useState<
+    "Primary" | "General" | "Requests"
+  >("Primary");
+  const [suggestedUsers, setSuggestedUsers] = useState<SearchUserResult[]>([]);
+  const [dismissedUsers, setDismissedUsers] = useState<Set<string>>(new Set());
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [profileVisible, setProfileVisible] = useState(false);
   const [chatTarget, setChatTarget] = useState<{
     userId: string;
     name: string;
@@ -445,10 +475,58 @@ export default function MessagesScreen() {
   useEffect(() => {
     (async () => {
       const me = await getMe();
-      if (me.data) setCurrentUserId(me.data.id);
+      if (me.data) {
+        setCurrentUserId(me.data.id);
+        setCurrentUser(me.data);
+      }
     })();
     loadConversations();
+    loadSuggestedUsers();
   }, []);
+
+  const loadSuggestedUsers = async () => {
+    // Fetch users with broad queries to get suggestions
+    const queries = ["a", "e", "i", "o"];
+    const allUsers: SearchUserResult[] = [];
+    const seenIds = new Set<string>();
+
+    for (const q of queries) {
+      const res = await searchUsers(q);
+      if (res.data) {
+        for (const user of res.data) {
+          if (!seenIds.has(user.id)) {
+            seenIds.add(user.id);
+            allUsers.push(user);
+          }
+        }
+      }
+    }
+    setSuggestedUsers(allUsers);
+  };
+
+  const handleFollow = async (userId: string) => {
+    const res = await toggleFollow(userId);
+    if (res.data) {
+      setFollowingIds((prev) => {
+        const next = new Set(prev);
+        if (res.data!.isFollowing) {
+          next.add(userId);
+        } else {
+          next.delete(userId);
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleDismissSuggestion = (userId: string) => {
+    setDismissedUsers((prev) => new Set(prev).add(userId));
+  };
+
+  const openProfile = (userId: string) => {
+    setProfileUserId(userId);
+    setProfileVisible(true);
+  };
 
   const loadConversations = async () => {
     setLoading(true);
@@ -497,31 +575,43 @@ export default function MessagesScreen() {
   // ── Chat view ─────────────────────────────────────────────────────────
   if (chatTarget) {
     return (
-      <ChatScreen
-        userId={chatTarget.userId}
-        userName={chatTarget.name}
-        userAvatar={chatTarget.avatar}
-        currentUserId={currentUserId}
-        onBack={() => {
-          setChatTarget(null);
-          loadConversations();
-        }}
-      />
+      <>
+        <ChatScreen
+          userId={chatTarget.userId}
+          userName={chatTarget.name}
+          userAvatar={chatTarget.avatar}
+          currentUserId={currentUserId}
+          onBack={() => {
+            setChatTarget(null);
+            loadConversations();
+          }}
+          onViewProfile={openProfile}
+        />
+        <UserProfileModal
+          visible={profileVisible}
+          userId={profileUserId}
+          onClose={() => setProfileVisible(false)}
+          onMessage={(userId, name, avatar) => {
+            setProfileVisible(false);
+            setChatTarget({ userId, name, avatar });
+          }}
+        />
+      </>
     );
   }
 
-  // ── Conversations list ────────────────────────────────────────────────
+  const displayName = currentUser?.name || "Messages";
+
+  // ── IG-style Conversations list ───────────────────────────────────────
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      {/* IG Header */}
       <View
         style={{
-          paddingTop: insets.top + 8,
+          paddingTop: insets.top + 4,
           paddingHorizontal: 16,
-          paddingBottom: 6,
-          backgroundColor: "#fff",
-          borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          paddingBottom: 10,
+          backgroundColor: COLORS.bg,
         }}
       >
         <View
@@ -531,61 +621,96 @@ export default function MessagesScreen() {
             justifyContent: "space-between",
           }}
         >
-          <Text
-            style={{
-              fontSize: 26,
-              fontWeight: "800",
-              color: "#111827",
-              letterSpacing: -0.5,
-            }}
-          >
-            Messages
-          </Text>
+          {/* Left: filter icon */}
+          <TouchableOpacity style={{ padding: 4, width: 70 }}>
+            <Ionicons name="options-outline" size={26} color={COLORS.text} />
+          </TouchableOpacity>
 
+          {/* Center: username with dropdown + online dot */}
           <TouchableOpacity
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: "#f3f4f6",
-              justifyContent: "center",
+              flex: 1,
+              flexDirection: "row",
               alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
             }}
           >
-            <Ionicons name="create-outline" size={19} color="#374151" />
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "800",
+                color: COLORS.text,
+                letterSpacing: -0.3,
+              }}
+            >
+              {displayName}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={COLORS.text} />
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: "#ff3040",
+                marginLeft: 2,
+              }}
+            />
           </TouchableOpacity>
-        </View>
 
-        {/* Search Bar */}
+          {/* Right: trending + compose icons */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 16,
+              width: 70,
+              justifyContent: "flex-end",
+            }}
+          >
+            <TouchableOpacity>
+              <Ionicons name="trending-up" size={26} color={COLORS.text} />
+            </TouchableOpacity>
+            <TouchableOpacity>
+              <Ionicons name="create-outline" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
-            backgroundColor: "#f3f4f6",
+            backgroundColor: COLORS.searchBg,
             borderRadius: 12,
-            paddingHorizontal: 12,
-            marginTop: 14,
-            marginBottom: 10,
+            paddingHorizontal: 14,
             height: 40,
-            gap: 8,
+            gap: 10,
           }}
         >
-          <Ionicons name="search" size={18} color="#9ca3af" />
+          <Ionicons name="search" size={18} color={COLORS.textMuted} />
           <TextInput
             style={{
               flex: 1,
               fontSize: 15,
-              color: "#111827",
+              color: COLORS.text,
               paddingVertical: 0,
             }}
-            placeholder="Search messages..."
-            placeholderTextColor="#9ca3af"
+            placeholder="Search"
+            placeholderTextColor={COLORS.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <Ionicons name="close-circle" size={18} color="#9ca3af" />
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color={COLORS.textMuted}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -602,7 +727,7 @@ export default function MessagesScreen() {
                 alignItems: "center",
               }}
             >
-              <ActivityIndicator size="large" color="#4f46e5" />
+              <ActivityIndicator size="large" color={COLORS.accent} />
             </View>
           ) : searchResults.length === 0 ? (
             <View
@@ -612,11 +737,11 @@ export default function MessagesScreen() {
                 alignItems: "center",
               }}
             >
-              <Ionicons name="search-outline" size={48} color="#e5e7eb" />
+              <Ionicons name="search-outline" size={48} color={COLORS.border} />
               <Text
                 style={{
                   fontSize: 15,
-                  color: "#9ca3af",
+                  color: COLORS.textSecondary,
                   fontWeight: "600",
                   marginTop: 12,
                 }}
@@ -643,44 +768,49 @@ export default function MessagesScreen() {
                     flexDirection: "row",
                     alignItems: "center",
                     paddingHorizontal: 16,
-                    paddingVertical: 12,
+                    paddingVertical: 10,
                     gap: 12,
                   }}
                   activeOpacity={0.6}
                 >
-                  {item.avatarUrl ? (
-                    <Image
-                      source={{ uri: item.avatarUrl }}
-                      style={{ width: 48, height: 48, borderRadius: 24 }}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 24,
-                        backgroundColor: "#e0e7ff",
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text
+                  <TouchableOpacity
+                    onPress={() => openProfile(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    {item.avatarUrl ? (
+                      <Image
+                        source={{ uri: item.avatarUrl }}
+                        style={{ width: 52, height: 52, borderRadius: 26 }}
+                      />
+                    ) : (
+                      <View
                         style={{
-                          fontSize: 18,
-                          fontWeight: "700",
-                          color: "#4f46e5",
+                          width: 52,
+                          height: 52,
+                          borderRadius: 26,
+                          backgroundColor: COLORS.card,
+                          justifyContent: "center",
+                          alignItems: "center",
                         }}
                       >
-                        {item.name?.charAt(0)?.toUpperCase() || "?"}
-                      </Text>
-                    </View>
-                  )}
+                        <Text
+                          style={{
+                            fontSize: 20,
+                            fontWeight: "700",
+                            color: COLORS.text,
+                          }}
+                        >
+                          {item.name?.charAt(0)?.toUpperCase() || "?"}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
                         fontSize: 15,
                         fontWeight: "600",
-                        color: "#111827",
+                        color: COLORS.text,
                       }}
                     >
                       {item.name}
@@ -689,7 +819,7 @@ export default function MessagesScreen() {
                       <Text
                         style={{
                           fontSize: 13,
-                          color: "#9ca3af",
+                          color: COLORS.textSecondary,
                           marginTop: 2,
                         }}
                       >
@@ -702,56 +832,235 @@ export default function MessagesScreen() {
             />
           )}
         </View>
-      ) : loading ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <ActivityIndicator size="large" color="#4f46e5" />
-        </View>
-      ) : conversations.length === 0 ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <View
-            style={{
-              width: 100,
-              height: 100,
-              borderRadius: 50,
-              backgroundColor: "#f0f0ff",
-              justifyContent: "center",
-              alignItems: "center",
-              marginBottom: 20,
-            }}
-          >
-            <Ionicons name="chatbubbles-outline" size={44} color="#4f46e5" />
-          </View>
-          <Text
-            style={{
-              fontSize: 20,
-              fontWeight: "700",
-              color: "#111827",
-              marginBottom: 6,
-            }}
-          >
-            No messages yet
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: "#9ca3af",
-              textAlign: "center",
-              maxWidth: 260,
-              lineHeight: 20,
-            }}
-          >
-            Search for people to start a conversation and connect with friends
-          </Text>
-        </View>
       ) : (
         <FlatList
           data={conversations}
           keyExtractor={(item) => item.user.id}
-          contentContainerStyle={{ paddingTop: 8 }}
+          ListHeaderComponent={
+            <>
+              {/* Notes / Stories Row */}
+              <View style={{ paddingBottom: 12 }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 16, gap: 16 }}
+                >
+                  {/* Your Note */}
+                  <View style={{ alignItems: "center", width: 76 }}>
+                    <View style={{ position: "relative" }}>
+                      {currentUser?.avatarUrl ? (
+                        <Image
+                          source={{ uri: currentUser.avatarUrl }}
+                          style={{ width: 72, height: 72, borderRadius: 36 }}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: 36,
+                            backgroundColor: COLORS.card,
+                            justifyContent: "center",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 28,
+                              fontWeight: "700",
+                              color: COLORS.text,
+                            }}
+                          >
+                            {displayName?.charAt(0)?.toUpperCase() || "?"}
+                          </Text>
+                        </View>
+                      )}
+                      {/* Note bubble */}
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: -8,
+                          left: -4,
+                          backgroundColor: COLORS.card,
+                          borderRadius: 14,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderWidth: 1,
+                          borderColor: COLORS.border,
+                        }}
+                      >
+                        <Text
+                          style={{ fontSize: 11, color: COLORS.textSecondary }}
+                        >
+                          Note...
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.text,
+                        marginTop: 6,
+                        textAlign: "center",
+                      }}
+                      numberOfLines={1}
+                    >
+                      Your note
+                    </Text>
+                  </View>
+
+                  {/* Map */}
+                  <View style={{ alignItems: "center", width: 76 }}>
+                    <View
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 36,
+                        backgroundColor: "#1a3a5c",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Ionicons name="earth" size={48} color="#4a9eff" />
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.text,
+                        marginTop: 6,
+                        textAlign: "center",
+                      }}
+                    >
+                      Map
+                    </Text>
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Filter Tabs */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 16,
+                  paddingBottom: 12,
+                  gap: 8,
+                }}
+              >
+                {/* Filter icon */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: COLORS.searchBg,
+                    borderRadius: 20,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    gap: 4,
+                  }}
+                >
+                  <Ionicons
+                    name="options-outline"
+                    size={16}
+                    color={COLORS.text}
+                  />
+                  <Ionicons name="chevron-down" size={14} color={COLORS.text} />
+                </TouchableOpacity>
+
+                {(["Primary", "Requests", "General"] as const).map((tab) => (
+                  <TouchableOpacity
+                    key={tab}
+                    onPress={() => setActiveTab(tab)}
+                    style={{
+                      backgroundColor:
+                        activeTab === tab ? COLORS.text : COLORS.searchBg,
+                      borderRadius: 20,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: activeTab === tab ? COLORS.bg : COLORS.text,
+                      }}
+                    >
+                      {tab}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          }
+          contentContainerStyle={{
+            paddingBottom: 20,
+            flexGrow: conversations.length === 0 && !loading ? 1 : undefined,
+          }}
+          ListEmptyComponent={
+            loading ? (
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  paddingTop: 60,
+                }}
+              >
+                <ActivityIndicator size="large" color={COLORS.accent} />
+              </View>
+            ) : (
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  paddingTop: 40,
+                }}
+              >
+                <View
+                  style={{
+                    width: 90,
+                    height: 90,
+                    borderRadius: 45,
+                    borderWidth: 2,
+                    borderColor: COLORS.text,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    marginBottom: 16,
+                  }}
+                >
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={40}
+                    color={COLORS.text}
+                  />
+                </View>
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: "700",
+                    color: COLORS.text,
+                    marginBottom: 6,
+                  }}
+                >
+                  No messages yet
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: COLORS.textSecondary,
+                    textAlign: "center",
+                    maxWidth: 260,
+                    lineHeight: 20,
+                  }}
+                >
+                  Search for people to start a conversation
+                </Text>
+              </View>
+            )
+          }
           renderItem={({ item }) => {
             const isMyMsg = item.lastMessage.senderId === currentUserId;
             const hasUnread = item.unreadCount > 0;
@@ -769,144 +1078,289 @@ export default function MessagesScreen() {
                   flexDirection: "row",
                   alignItems: "center",
                   paddingHorizontal: 16,
-                  paddingVertical: 14,
+                  paddingVertical: 10,
                   gap: 14,
                 }}
                 activeOpacity={0.6}
               >
-                {/* Avatar with online indicator */}
-                <View>
-                  {item.user.avatarUrl ? (
-                    <Image
-                      source={{ uri: item.user.avatarUrl }}
-                      style={{ width: 56, height: 56, borderRadius: 28 }}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 28,
-                        backgroundColor: "#e0e7ff",
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 22,
-                          fontWeight: "700",
-                          color: "#4f46e5",
-                        }}
-                      >
-                        {item.user.name?.charAt(0)?.toUpperCase() || "?"}
-                      </Text>
-                    </View>
-                  )}
-                  <View
-                    style={{
-                      position: "absolute",
-                      bottom: 1,
-                      right: 1,
-                      width: 14,
-                      height: 14,
-                      borderRadius: 7,
-                      backgroundColor: "#22c55e",
-                      borderWidth: 2.5,
-                      borderColor: "#fff",
-                    }}
-                  />
-                </View>
-
-                {/* Text content */}
-                <View style={{ flex: 1 }}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: hasUnread ? "700" : "600",
-                        color: "#111827",
-                      }}
-                    >
-                      {item.user.name}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: hasUnread ? "#4f46e5" : "#9ca3af",
-                        fontWeight: hasUnread ? "600" : "400",
-                      }}
-                    >
-                      {formatTime(item.lastMessage.createdAt)}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      marginTop: 4,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        flex: 1,
-                        fontSize: 14,
-                        color: hasUnread ? "#374151" : "#9ca3af",
-                        fontWeight: hasUnread ? "500" : "400",
-                      }}
-                      numberOfLines={1}
-                    >
-                      {isMyMsg ? "You: " : ""}
-                      {item.lastMessage.text}
-                    </Text>
-
-                    {hasUnread && (
+                {/* Avatar */}
+                <TouchableOpacity
+                  onPress={() => openProfile(item.user.id)}
+                  activeOpacity={0.7}
+                >
+                  <View>
+                    {item.user.avatarUrl ? (
+                      <Image
+                        source={{ uri: item.user.avatarUrl }}
+                        style={{ width: 56, height: 56, borderRadius: 28 }}
+                      />
+                    ) : (
                       <View
                         style={{
-                          backgroundColor: "#4f46e5",
-                          borderRadius: 11,
-                          minWidth: 22,
-                          height: 22,
+                          width: 56,
+                          height: 56,
+                          borderRadius: 28,
+                          backgroundColor: COLORS.card,
                           justifyContent: "center",
                           alignItems: "center",
-                          paddingHorizontal: 7,
-                          marginLeft: 10,
                         }}
                       >
                         <Text
                           style={{
-                            fontSize: 11,
+                            fontSize: 22,
                             fontWeight: "700",
-                            color: "#fff",
+                            color: COLORS.text,
                           }}
                         >
-                          {item.unreadCount}
+                          {item.user.name?.charAt(0)?.toUpperCase() || "?"}
                         </Text>
                       </View>
                     )}
+                    {/* Online dot */}
+                    <View
+                      style={{
+                        position: "absolute",
+                        bottom: 1,
+                        right: 1,
+                        width: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        backgroundColor: COLORS.online,
+                        borderWidth: 2.5,
+                        borderColor: COLORS.bg,
+                      }}
+                    />
                   </View>
+                </TouchableOpacity>
+
+                {/* Text content */}
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: hasUnread ? "700" : "400",
+                      color: COLORS.text,
+                    }}
+                  >
+                    {item.user.name}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: COLORS.textSecondary,
+                      marginTop: 2,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {isMyMsg ? "You: " : ""}
+                    {item.lastMessage.text} ·{" "}
+                    {formatTime(item.lastMessage.createdAt)}
+                  </Text>
                 </View>
+
+                {/* Right side: unread badge or camera */}
+                {hasUnread ? (
+                  <View
+                    style={{
+                      backgroundColor: COLORS.accent,
+                      borderRadius: 11,
+                      minWidth: 22,
+                      height: 22,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      paddingHorizontal: 7,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "700",
+                        color: "#fff",
+                      }}
+                    >
+                      {item.unreadCount}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={{ padding: 4 }}>
+                    <Ionicons
+                      name="camera-outline"
+                      size={22}
+                      color={COLORS.textSecondary}
+                    />
+                  </TouchableOpacity>
+                )}
               </TouchableOpacity>
             );
           }}
-          ItemSeparatorComponent={() => (
-            <View
-              style={{
-                height: 1,
-                backgroundColor: "#f3f4f6",
-                marginLeft: 86,
-              }}
-            />
-          )}
+          ListFooterComponent={(() => {
+            // Filter out current user, existing conversations, and dismissed users
+            const conversationUserIds = new Set(
+              conversations.map((c) => c.user.id),
+            );
+            const filtered = suggestedUsers.filter(
+              (u) =>
+                u.id !== currentUserId &&
+                !conversationUserIds.has(u.id) &&
+                !dismissedUsers.has(u.id),
+            );
+            if (filtered.length === 0) return null;
+            return (
+              <View style={{ paddingTop: 28, paddingHorizontal: 16 }}>
+                {/* Accounts to follow section header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 16,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "700",
+                      color: COLORS.text,
+                    }}
+                  >
+                    Accounts to follow
+                  </Text>
+                  <TouchableOpacity>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: COLORS.accent,
+                      }}
+                    >
+                      See all
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Suggested user cards */}
+                {filtered.map((user) => {
+                  const isFollowing = followingIds.has(user.id);
+                  return (
+                    <View
+                      key={user.id}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingVertical: 10,
+                        gap: 14,
+                      }}
+                    >
+                      {/* Avatar */}
+                      <TouchableOpacity
+                        onPress={() => openProfile(user.id)}
+                        activeOpacity={0.7}
+                      >
+                        {user.avatarUrl ? (
+                          <Image
+                            source={{ uri: user.avatarUrl }}
+                            style={{ width: 52, height: 52, borderRadius: 26 }}
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: 52,
+                              height: 52,
+                              borderRadius: 26,
+                              backgroundColor: COLORS.card,
+                              justifyContent: "center",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 20,
+                                fontWeight: "700",
+                                color: COLORS.text,
+                              }}
+                            >
+                              {user.name?.charAt(0)?.toUpperCase() || "?"}
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Name + subtitle */}
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: "600",
+                            color: COLORS.text,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {user.name}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: COLORS.textSecondary,
+                            marginTop: 1,
+                          }}
+                        >
+                          Suggested for you
+                        </Text>
+                      </View>
+
+                      {/* Follow button */}
+                      <TouchableOpacity
+                        onPress={() => handleFollow(user.id)}
+                        style={{
+                          backgroundColor: isFollowing
+                            ? COLORS.searchBg
+                            : COLORS.accent,
+                          borderRadius: 8,
+                          paddingHorizontal: 20,
+                          paddingVertical: 8,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            fontWeight: "700",
+                            color: COLORS.text,
+                          }}
+                        >
+                          {isFollowing ? "Following" : "Follow"}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Dismiss X button */}
+                      <TouchableOpacity
+                        onPress={() => handleDismissSuggestion(user.id)}
+                        style={{ padding: 4 }}
+                      >
+                        <Ionicons
+                          name="close"
+                          size={20}
+                          color={COLORS.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })()}
         />
       )}
+
+      {/* Profile Modal */}
+      <UserProfileModal
+        visible={profileVisible}
+        userId={profileUserId}
+        onClose={() => setProfileVisible(false)}
+        onMessage={(userId, name, avatar) => {
+          setProfileVisible(false);
+          setChatTarget({ userId, name, avatar });
+        }}
+      />
     </View>
   );
 }
