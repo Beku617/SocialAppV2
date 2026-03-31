@@ -12,7 +12,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getValidToken, loginUser } from "../../services/api";
+import {
+  getHomeRouteForUser,
+  getValidToken,
+  loginUser,
+  resolveSessionUser,
+} from "../../services/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -29,7 +34,10 @@ export default function LoginScreen() {
       if (!mounted) return;
 
       if (token) {
-        router.replace("/(dashboard)");
+        const sessionUser = await resolveSessionUser();
+        if (!mounted) return;
+
+        router.replace(getHomeRouteForUser(sessionUser) as any);
         return;
       }
 
@@ -58,8 +66,7 @@ export default function LoginScreen() {
       return;
     }
 
-    console.log("[LOGIN] Success! Navigating to dashboard...", data?.user);
-    router.replace("/(dashboard)");
+    router.replace(getHomeRouteForUser(data?.user) as any);
   };
 
   if (checkingSession) {

@@ -16,9 +16,24 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 30,
+    },
     passwordHash: {
       type: String,
       required: true,
+    },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+      index: true,
     },
     avatarUrl: {
       type: String,
@@ -33,6 +48,18 @@ const userSchema = new mongoose.Schema(
     },
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    bannedAt: {
+      type: Date,
+      default: null,
+    },
+    banExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    banIsPermanent: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

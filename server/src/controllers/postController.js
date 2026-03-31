@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Post = require("../models/Post");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
+const { normalizeImageUrls, serializePost } = require("../utils/serializePost");
 const bcrypt = require("bcryptjs");
 
 const listPosts = async (_req, res, next) => {
@@ -10,9 +11,28 @@ const listPosts = async (_req, res, next) => {
       .sort({ createdAt: -1 })
       .limit(50)
       .populate("author", "name avatarUrl")
-      .populate("comments.author", "name avatarUrl");
+      .populate("comments.author", "name avatarUrl")
+      .lean();
 
-    return res.status(200).json({ posts });
+    return res.status(200).json({ posts: posts.map(serializePost) });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getPost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const post = await Post.findById(postId)
+      .populate("author", "name avatarUrl")
+      .populate("comments.author", "name avatarUrl")
+      .lean();
+
+    if (!post) {
+      throw createHttpError(404, "Post not found");
+    }
+
+    return res.status(200).json({ post: serializePost(post) });
   } catch (error) {
     return next(error);
   }
@@ -20,17 +40,63 @@ const listPosts = async (_req, res, next) => {
 
 const createPost = async (req, res, next) => {
   try {
-    const { text, imageUrl = "" } = req.body;
+    const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+    const imageUrls = normalizeImageUrls(req.body);
+
+    if (!text && imageUrls.length === 0) {
+      throw createHttpError(400, "Post must include text or at least one image");
+    }
+
     const post = await Post.create({
       author: req.user._id,
       text,
-      imageUrl,
+      imageUrl: imageUrls[0] || "",
+      imageUrls,
       likes: [],
       comments: [],
     });
 
-    await post.populate("author", "name avatarUrl");
-    return res.status(201).json({ post });
+    const createdPost = await Post.findById(post._id)
+      .populate("author", "name avatarUrl")
+      .populate("comments.author", "name avatarUrl")
+      .lean();
+
+    return res.status(201).json({ post: serializePost(createdPost) });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const updatePost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+    const imageUrls = normalizeImageUrls(req.body);
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      throw createHttpError(404, "Post not found");
+    }
+
+    if (post.author.toString() !== req.user._id.toString()) {
+      throw createHttpError(403, "You can edit only your own posts");
+    }
+
+    if (!text && imageUrls.length === 0) {
+      throw createHttpError(400, "Post must include text or at least one image");
+    }
+
+    post.text = text;
+    post.imageUrl = imageUrls[0] || "";
+    post.imageUrls = imageUrls;
+    await post.save();
+
+    const updatedPost = await Post.findById(postId)
+      .populate("author", "name avatarUrl")
+      .populate("comments.author", "name avatarUrl")
+      .lean();
+
+    return res.status(200).json({ post: serializePost(updatedPost) });
   } catch (error) {
     return next(error);
   }
@@ -205,7 +271,9 @@ const seedPosts = async (_req, res, next) => {
 
 module.exports = {
   listPosts,
+  getPost,
   createPost,
+  updatePost,
   toggleLike,
   addComment,
   deletePost,

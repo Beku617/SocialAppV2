@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
+import { router } from "expo-router";
 import { useState } from "react";
 import {
   Dimensions,
@@ -9,10 +11,15 @@ import {
   View,
 } from "react-native";
 import {
+  deletePost as apiDeletePost,
   toggleLike as apiToggleLike,
   type Post,
 } from "../../services/api";
+import { BASE_URL } from "../../services/config";
+import FeedActionDialog from "./FeedActionDialog";
 import { formatCount, timeAgo } from "./helpers";
+import MultiImageGrid from "./MultiImageGrid";
+import PostOptionsSheet from "./PostOptionsSheet";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -75,14 +82,80 @@ export default function PostCard({
   post,
   currentUserId,
   onLikeToggled,
+  onRemovePost,
+  onHideAuthor,
 }: {
   post: Post;
   currentUserId: string | null;
   onLikeToggled: (postId: string, liked: boolean, count: number) => void;
+  onRemovePost: (postId: string) => void;
+  onHideAuthor: (authorId: string) => void;
 }) {
+  const imageUrls =
+    Array.isArray(post.imageUrls) && post.imageUrls.length > 0
+      ? post.imageUrls
+      : post.imageUrl
+        ? [post.imageUrl]
+        : [];
+  const isOwner = currentUserId === post.author.id;
   const isLiked = currentUserId ? post.likes.includes(currentUserId) : false;
   const [liked, setLiked] = useState(isLiked);
   const [likeCount, setLikeCount] = useState(post.likes.length);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [dialogState, setDialogState] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    primaryLabel: string;
+    secondaryLabel?: string;
+    tone?: "default" | "success" | "danger" | "warning";
+    onPrimary?: () => void;
+    onSecondary?: () => void;
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+    primaryLabel: "OK",
+  });
+
+  const closeDialog = () =>
+    setDialogState((prev) => ({
+      ...prev,
+      visible: false,
+      onPrimary: undefined,
+      onSecondary: undefined,
+    }));
+
+  const openDialog = ({
+    title,
+    message,
+    primaryLabel = "OK",
+    secondaryLabel,
+    tone = "default",
+    onPrimary,
+    onSecondary,
+  }: {
+    title: string;
+    message: string;
+    primaryLabel?: string;
+    secondaryLabel?: string;
+    tone?: "default" | "success" | "danger" | "warning";
+    onPrimary?: () => void;
+    onSecondary?: () => void;
+  }) => {
+    setDialogState({
+      visible: true,
+      title,
+      message,
+      primaryLabel,
+      secondaryLabel,
+      tone,
+      onPrimary,
+      onSecondary,
+    });
+  };
 
   const handleLike = async () => {
     const prev = liked;
@@ -101,124 +174,298 @@ export default function PostCard({
     }
   };
 
-  return (
-    <View
-      style={{
-        backgroundColor: "#ffffff",
-        borderRadius: 0,
-        marginHorizontal: 0,
-        marginBottom: 6,
-        overflow: "hidden",
-        elevation: 0,
-        borderBottomWidth: 1,
-        borderBottomColor: "#f3f4f6",
-      }}
-    >
-      {/* Header */}
-      <View
-        style={{
-          padding: 12,
-          paddingHorizontal: 14,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Image
-            source={{
-              uri:
-                post.author.avatarUrl ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author.name)}&background=4f46e5&color=fff`,
-            }}
-            style={{ width: 40, height: 40, borderRadius: 20 }}
-          />
-          <View>
-            <Text
-              style={{ fontSize: 14, fontWeight: "bold", color: "#111827" }}
-            >
-              {post.author.name}
-            </Text>
-            <Text style={{ fontSize: 12, color: "#9ca3af" }}>
-              {timeAgo(post.createdAt)}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity>
-          <Ionicons name="ellipsis-vertical" size={18} color="#9ca3af" />
-        </TouchableOpacity>
-      </View>
+  const handleEditPost = () => {
+    setMenuVisible(false);
+    router.push({
+      pathname: "/edit-post/[postId]",
+      params: { postId: post.id },
+    });
+  };
 
-      {/* Content */}
+  const handleDeletePost = () => {
+    setMenuVisible(false);
+    openDialog({
+      title: "Delete post?",
+      message: "This will permanently remove the post from your profile and feed.",
+      primaryLabel: "Delete",
+      secondaryLabel: "Cancel",
+      tone: "danger",
+      onPrimary: async () => {
+        closeDialog();
+        const { error } = await apiDeletePost(post.id);
+        if (error) {
+          openDialog({
+            title: "Delete failed",
+            message: error,
+            primaryLabel: "Close",
+            tone: "warning",
+            onPrimary: closeDialog,
+          });
+          return;
+        }
+
+        onRemovePost(post.id);
+      },
+      onSecondary: closeDialog,
+    });
+  };
+
+  const handleInterested = () => {
+    setMenuVisible(false);
+    openDialog({
+      title: "Preference updated",
+      message: "We’ll try to show you more posts like this.",
+      primaryLabel: "OK",
+      tone: "success",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleNotInterested = () => {
+    setMenuVisible(false);
+    openDialog({
+      title: "Preference updated",
+      message: "We’ll try to show you fewer posts like this.",
+      primaryLabel: "OK",
+      tone: "success",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleToggleSaved = () => {
+    const nextSaved = !saved;
+    setSaved(nextSaved);
+    setMenuVisible(false);
+    openDialog({
+      title: nextSaved ? "Post saved" : "Removed from saved",
+      message: nextSaved
+        ? "This post was added to your saved items."
+        : "This post was removed from your saved items.",
+      primaryLabel: "OK",
+      tone: "success",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleHidePost = () => {
+    setMenuVisible(false);
+    onRemovePost(post.id);
+  };
+
+  const handleReportPost = () => {
+    setMenuVisible(false);
+    openDialog({
+      title: "Post reported",
+      message: "Thanks. We’ll review this post and keep your report private.",
+      primaryLabel: "OK",
+      tone: "warning",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleToggleNotifications = () => {
+    const nextEnabled = !notificationsEnabled;
+    setNotificationsEnabled(nextEnabled);
+    setMenuVisible(false);
+    openDialog({
+      title: nextEnabled ? "Notifications on" : "Notifications off",
+      message: nextEnabled
+        ? "You’ll get updates when people interact with this post."
+        : "You’ll stop getting updates for this post.",
+      primaryLabel: "OK",
+      tone: "success",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleCopyLink = async () => {
+    await Clipboard.setStringAsync(`${BASE_URL}/api/posts/${post.id}`);
+    setMenuVisible(false);
+    openDialog({
+      title: "Link copied",
+      message: "The post link is ready to paste and share.",
+      primaryLabel: "OK",
+      tone: "success",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleSnoozeAuthor = () => {
+    setMenuVisible(false);
+    openDialog({
+      title: `Snoozed ${post.author.name}`,
+      message: "Posts from this person will be hidden for the next 30 days.",
+      primaryLabel: "OK",
+      tone: "success",
+      onPrimary: closeDialog,
+    });
+  };
+
+  const handleHideAuthor = () => {
+    setMenuVisible(false);
+    onHideAuthor(post.author.id);
+  };
+
+  return (
+    <>
       <View
         style={{
-          paddingHorizontal: 14,
-          paddingBottom: post.imageUrl ? 10 : 12,
+          backgroundColor: "#ffffff",
+          borderRadius: 0,
+          marginHorizontal: 0,
+          marginBottom: 6,
+          overflow: "hidden",
+          elevation: 0,
+          borderBottomWidth: 1,
+          borderBottomColor: "#f3f4f6",
         }}
       >
-        <Text
+        {/* Header */}
+        <View
           style={{
-            fontSize: 14,
-            color: "#4b5563",
-            lineHeight: 21,
+            padding: 12,
+            paddingHorizontal: 14,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          {post.text}
-        </Text>
-      </View>
-
-      {/* Image */}
-      {post.imageUrl ? (
-        <Image
-          source={{ uri: post.imageUrl }}
-          style={{ width: "100%", height: SCREEN_WIDTH * 0.74 }}
-          resizeMode="cover"
-        />
-      ) : null}
-
-      {/* Actions */}
-      <View
-        style={{
-          padding: 12,
-          paddingHorizontal: 14,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <View style={{ flexDirection: "row", gap: 20 }}>
-          <TouchableOpacity
-            onPress={handleLike}
-            style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-          >
-            <Ionicons
-              name={liked ? "heart" : "heart-outline"}
-              size={24}
-              color={liked ? "#ef4444" : "#6b7280"}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Image
+              source={{
+                uri:
+                  post.author.avatarUrl ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author.name)}&background=4f46e5&color=fff`,
+              }}
+              style={{ width: 40, height: 40, borderRadius: 20 }}
             />
+            <View>
+              <Text
+                style={{ fontSize: 14, fontWeight: "bold", color: "#111827" }}
+              >
+                {post.author.name}
+              </Text>
+              <Text style={{ fontSize: 12, color: "#9ca3af" }}>
+                {timeAgo(post.createdAt)}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={() => setMenuVisible(true)}>
+            <Ionicons name="ellipsis-vertical" size={18} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Content */}
+        <View
+          style={{
+            paddingHorizontal: 14,
+            paddingBottom: imageUrls.length > 0 ? 10 : 12,
+          }}
+        >
+          {post.text ? (
             <Text
               style={{
                 fontSize: 14,
-                fontWeight: "500",
-                color: liked ? "#ef4444" : "#6b7280",
+                color: "#4b5563",
+                lineHeight: 21,
               }}
             >
-              {formatCount(likeCount)}
+              {post.text}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-          >
-            <Ionicons name="chatbubble-outline" size={22} color="#6b7280" />
-            <Text style={{ fontSize: 14, fontWeight: "500", color: "#6b7280" }}>
-              {formatCount(post.comments.length)}
-            </Text>
+          ) : null}
+        </View>
+
+        {/* Image */}
+        {imageUrls.length > 0 ? (
+          <View>
+            <MultiImageGrid
+              images={imageUrls}
+              height={SCREEN_WIDTH * 0.74}
+              borderRadius={0}
+              singleImageResizeMode="cover"
+              multiImageResizeMode="contain"
+              viewerTitle={post.author.name}
+              viewerSubtitle={timeAgo(post.createdAt).toUpperCase()}
+              viewerShowPostChrome
+            />
+          </View>
+        ) : null}
+
+        {/* Actions */}
+        <View
+          style={{
+            padding: 12,
+            paddingHorizontal: 14,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ flexDirection: "row", gap: 20 }}>
+            <TouchableOpacity
+              onPress={handleLike}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+            >
+              <Ionicons
+                name={liked ? "heart" : "heart-outline"}
+                size={24}
+                color={liked ? "#ef4444" : "#6b7280"}
+              />
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: liked ? "#ef4444" : "#6b7280",
+                }}
+              >
+                {formatCount(likeCount)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+            >
+              <Ionicons name="chatbubble-outline" size={22} color="#6b7280" />
+              <Text style={{ fontSize: 14, fontWeight: "500", color: "#6b7280" }}>
+                {formatCount(post.comments.length)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity>
+            <Ionicons name="share-outline" size={22} color="#6b7280" />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity>
-          <Ionicons name="share-outline" size={22} color="#6b7280" />
-        </TouchableOpacity>
       </View>
-    </View>
+
+      <PostOptionsSheet
+        visible={menuVisible}
+        isOwner={isOwner}
+        authorName={post.author.name}
+        saved={saved}
+        notificationsEnabled={notificationsEnabled}
+        onClose={() => setMenuVisible(false)}
+        onEditPost={handleEditPost}
+        onDeletePost={handleDeletePost}
+        onInterested={handleInterested}
+        onNotInterested={handleNotInterested}
+        onToggleSaved={handleToggleSaved}
+        onHidePost={handleHidePost}
+        onReportPost={handleReportPost}
+        onToggleNotifications={handleToggleNotifications}
+        onCopyLink={handleCopyLink}
+        onSnoozeAuthor={handleSnoozeAuthor}
+        onHideAuthor={handleHideAuthor}
+      />
+
+      <FeedActionDialog
+        visible={dialogState.visible}
+        title={dialogState.title}
+        message={dialogState.message}
+        primaryLabel={dialogState.primaryLabel}
+        secondaryLabel={dialogState.secondaryLabel}
+        tone={dialogState.tone}
+        onPrimary={dialogState.onPrimary || closeDialog}
+        onSecondary={dialogState.onSecondary}
+      />
+    </>
   );
 }

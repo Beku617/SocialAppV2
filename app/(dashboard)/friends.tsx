@@ -78,15 +78,15 @@ export default function CreateScreen() {
   };
 
   const handleShare = async () => {
-    if (!caption.trim()) {
-      Alert.alert("Empty post", "Please write something to share.");
+    if (!caption.trim() && !selectedImage) {
+      Alert.alert("Empty post", "Add text or an image before sharing.");
       return;
     }
 
     setPosting(true);
-    const { data, error } = await createPost(
+    const { error } = await createPost(
       caption.trim(),
-      selectedImage || undefined,
+      selectedImage ? [selectedImage] : undefined,
     );
     setPosting(false);
 
@@ -97,9 +97,7 @@ export default function CreateScreen() {
 
     setCaption("");
     setSelectedImage(null);
-    Alert.alert("Posted!", "Your post has been shared.", [
-      { text: "OK", onPress: () => router.navigate("/(dashboard)") },
-    ]);
+    router.replace("/(dashboard)");
   };
 
   const avatarUri =
@@ -129,9 +127,10 @@ export default function CreateScreen() {
         </Text>
         <TouchableOpacity
           onPress={handleShare}
-          disabled={posting || !caption.trim()}
+          disabled={posting || (!caption.trim() && !selectedImage)}
           style={{
-            backgroundColor: caption.trim() ? "#4f46e5" : "#c7d2fe",
+            backgroundColor:
+              caption.trim() || selectedImage ? "#4f46e5" : "#c7d2fe",
             paddingHorizontal: 20,
             paddingVertical: 8,
             borderRadius: 20,

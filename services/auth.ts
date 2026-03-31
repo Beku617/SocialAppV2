@@ -1,27 +1,26 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BASE_URL, getValidToken, saveAuth, type ApiResponse } from "./config";
+import {
+  BASE_URL,
+  getValidToken,
+  saveAuth,
+  type ApiResponse,
+  type AuthUser,
+  type BanInfo,
+} from "./config";
 
 const USER_KEY = "auth_user";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 interface AuthResponse {
   token: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
+  user: AuthUser;
 }
 
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl: string;
-  bio: string;
+export interface UserProfile extends AuthUser {
   createdAt: string;
   followersCount: number;
   followingCount: number;
+  ban?: BanInfo;
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────

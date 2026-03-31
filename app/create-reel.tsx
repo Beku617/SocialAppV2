@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   createPost,
   createStory,
+  getMe,
+  getUser,
   completeReelUpload,
   initiateReelUpload,
   markReelFailed,
@@ -24,14 +27,16 @@ import {
   uploadReelVideoLocal,
   type ReelVisibility,
 } from "../services/api";
+import MultiImageGrid from "../components/dashboard/MultiImageGrid";
 
 type CreateMode = "post" | "story" | "reel";
 
 const VISIBILITY_OPTIONS: ReelVisibility[] = ["public", "followers", "private"];
-const CREATE_OPTIONS: Array<{ key: CreateMode; label: string; icon: string }> = [
-  { key: "post", label: "Post", icon: "create-outline" },
-  { key: "story", label: "Story", icon: "albums-outline" },
-  { key: "reel", label: "Reel", icon: "play-circle-outline" },
+const POST_ACTION_CHIPS = [
+  { icon: "musical-notes-outline", label: "Music" },
+  { icon: "people-outline", label: "People" },
+  { icon: "location-outline", label: "Location" },
+  { icon: "happy-outline", label: "Feeling" },
 ];
 
 const formatDuration = (durationMs: number) => {
@@ -44,12 +49,16 @@ const formatDuration = (durationMs: number) => {
 
 export default function CreateReelScreen() {
   const insets = useSafeAreaInsets();
-  const [mode, setMode] = useState<CreateMode>("post");
+  const params = useLocalSearchParams<{ mode?: string | string[] }>();
+  const initialModeParam = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+  const initialMode: CreateMode =
+    initialModeParam === "story" || initialModeParam === "reel" ? initialModeParam : "post";
+  const [mode, setMode] = useState<CreateMode>(initialMode);
   const [caption, setCaption] = useState("");
   const [music, setMusic] = useState("");
   const [visibility, setVisibility] = useState<ReelVisibility>("public");
 
-  const [postImageData, setPostImageData] = useState("");
+  const [postImageData, setPostImageData] = useState<string[]>([]);
   const [storyImageData, setStoryImageData] = useState("");
 
   const [videoUri, setVideoUri] = useState("");
@@ -58,15 +67,38 @@ export default function CreateReelScreen() {
   const [videoDurationMs, setVideoDurationMs] = useState(0);
 
   const [publishing, setPublishing] = useState(false);
+  const [userName, setUserName] = useState("You");
+  const [userAvatar, setUserAvatar] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const meResult = await getMe();
+      if (meResult.data) {
+        setUserName(meResult.data.name || "You");
+        setUserAvatar(meResult.data.avatarUrl || "");
+        return;
+      }
+
+      const cachedUser = await getUser();
+      if (cachedUser?.name) setUserName(cachedUser.name);
+      if (cachedUser?.avatarUrl) setUserAvatar(cachedUser.avatarUrl);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (initialModeParam === "post" || initialModeParam === "story" || initialModeParam === "reel") {
+      setMode(initialModeParam);
+    }
+  }, [initialModeParam]);
 
   const canPublish = useMemo(() => {
     if (publishing) return false;
-    if (mode === "post") return caption.trim().length > 0;
+    if (mode === "post") return caption.trim().length > 0 || postImageData.length > 0;
     if (mode === "story") return storyImageData.length > 0;
     return videoUri.length > 0;
-  }, [publishing, mode, caption, storyImageData, videoUri]);
+  }, [publishing, mode, caption, postImageData.length, storyImageData, videoUri]);
 
-  const pickImageAsBase64 = async (fromCamera = false) => {
+  const pickImageAsBase64 = async (fromCamera = false, allowMultiple = false) => {
     const permission = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -90,35 +122,46 @@ export default function CreateReelScreen() {
         })
       : await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ["images"],
-          allowsEditing: true,
+          allowsEditing: !allowMultiple,
+          allowsMultipleSelection: allowMultiple,
+          selectionLimit: allowMultiple ? 10 : 1,
           quality: 0.3,
           base64: true,
         });
 
-    if (result.canceled || !result.assets?.[0]?.base64) return null;
-    const asset = result.assets[0];
-    const mimeType = asset.mimeType || "image/jpeg";
-    return `data:${mimeType};base64,${asset.base64}`;
+    if (result.canceled || !result.assets?.length) return null;
+
+    const imagePayloads = result.assets
+      .map((asset) => {
+        if (!asset.base64) return "";
+        const mimeType = asset.mimeType || "image/jpeg";
+        return `data:${mimeType};base64,${asset.base64}`;
+      })
+      .filter(Boolean);
+
+    return imagePayloads.length > 0 ? imagePayloads : null;
   };
 
   const handlePickPostImage = async () => {
-    const data = await pickImageAsBase64(false);
+    const data = await pickImageAsBase64(false, true);
     if (data) setPostImageData(data);
   };
 
   const handleCapturePostImage = async () => {
     const data = await pickImageAsBase64(true);
-    if (data) setPostImageData(data);
+    if (data) {
+      setPostImageData((current) => [...current, ...data].slice(0, 10));
+    }
   };
 
   const handlePickStoryImage = async () => {
     const data = await pickImageAsBase64(false);
-    if (data) setStoryImageData(data);
+    if (data?.[0]) setStoryImageData(data[0]);
   };
 
   const handleCaptureStoryImage = async () => {
     const data = await pickImageAsBase64(true);
-    if (data) setStoryImageData(data);
+    if (data?.[0]) setStoryImageData(data[0]);
   };
 
   const handlePickVideo = async () => {
@@ -164,12 +207,12 @@ export default function CreateReelScreen() {
   };
 
   const publishPost = async () => {
-    if (!caption.trim()) {
-      Alert.alert("Post is empty", "Write something to share as a post.");
+    if (!caption.trim() && postImageData.length === 0) {
+      Alert.alert("Post is empty", "Add a caption or at least one image.");
       return;
     }
     setPublishing(true);
-    const result = await createPost(caption.trim(), postImageData || undefined);
+    const result = await createPost(caption.trim(), postImageData);
     setPublishing(false);
 
     if (!result.data) {
@@ -177,9 +220,9 @@ export default function CreateReelScreen() {
       return;
     }
 
-    Alert.alert("Posted", "Your post was shared.", [
-      { text: "Open Home", onPress: () => router.replace("/(dashboard)") },
-    ]);
+    setCaption("");
+    setPostImageData([]);
+    router.replace("/(dashboard)");
   };
 
   const publishStory = async () => {
@@ -196,9 +239,9 @@ export default function CreateReelScreen() {
       return;
     }
 
-    Alert.alert("Story posted", "Your story is now live.", [
-      { text: "Open Home", onPress: () => router.replace("/(dashboard)") },
-    ]);
+    setCaption("");
+    setStoryImageData("");
+    router.replace("/(dashboard)");
   };
 
   const publishReel = async () => {
@@ -287,6 +330,10 @@ export default function CreateReelScreen() {
     await publishReel();
   };
 
+  const avatarUri =
+    userAvatar ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=4f46e5&color=fff`;
+
   return (
     <View style={{ flex: 1, backgroundColor: "#ffffff" }}>
       <View
@@ -334,71 +381,104 @@ export default function CreateReelScreen() {
           contentContainerStyle={{ padding: 18, paddingBottom: 34 }}
           showsVerticalScrollIndicator={false}
         >
-          <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
-            {CREATE_OPTIONS.map((option) => {
-              const selected = option.key === mode;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => setMode(option.key)}
-                  style={{
-                    flex: 1,
-                    borderWidth: 1,
-                    borderColor: selected ? "#4f46e5" : "#e5e7eb",
-                    backgroundColor: selected ? "#eef2ff" : "#fff",
-                    borderRadius: 12,
-                    paddingVertical: 10,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "row",
-                    gap: 6,
-                  }}
-                >
-                  <Ionicons
-                    name={option.icon as any}
-                    size={16}
-                    color={selected ? "#4338ca" : "#6b7280"}
-                  />
-                  <Text
+          {mode === "post" ? (
+            <>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 14,
+                }}
+              >
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={{ width: 48, height: 48, borderRadius: 24 }}
+                />
+                <View>
+                  <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>
+                    {userName}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+                    Public post
+                  </Text>
+                </View>
+              </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 10, paddingRight: 8, marginBottom: 14 }}
+              >
+                {POST_ACTION_CHIPS.map((chip) => (
+                  <TouchableOpacity
+                    key={chip.label}
+                    activeOpacity={0.88}
                     style={{
-                      fontSize: 13,
-                      fontWeight: selected ? "700" : "600",
-                      color: selected ? "#4338ca" : "#6b7280",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      borderWidth: 1,
+                      borderColor: "#dbe1ea",
+                      backgroundColor: "#fff",
+                      borderRadius: 999,
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
                     }}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                    <Ionicons name={chip.icon as any} size={18} color="#111827" />
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>
+                      {chip.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
-          <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 6 }}>
-            Caption
-          </Text>
-          <TextInput
-            value={caption}
-            onChangeText={setCaption}
-            placeholder="Write a caption..."
-            placeholderTextColor="#9ca3af"
-            multiline
-            style={{
-              minHeight: 96,
-              borderWidth: 1,
-              borderColor: "#e5e7eb",
-              borderRadius: 14,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              fontSize: 15,
-              color: "#111827",
-              textAlignVertical: "top",
-            }}
-          />
+              <TextInput
+                value={caption}
+                onChangeText={setCaption}
+                placeholder="What's on your mind?"
+                placeholderTextColor="#9ca3af"
+                multiline
+                style={{
+                  minHeight: 92,
+                  paddingVertical: 6,
+                  fontSize: 18,
+                  color: "#111827",
+                  textAlignVertical: "top",
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 6 }}>
+                Caption
+              </Text>
+              <TextInput
+                value={caption}
+                onChangeText={setCaption}
+                placeholder="Write a caption..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                style={{
+                  minHeight: 96,
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                  borderRadius: 14,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  fontSize: 15,
+                  color: "#111827",
+                  textAlignVertical: "top",
+                }}
+              />
+            </>
+          )}
 
           {mode === "post" && (
             <>
               <Text style={{ fontSize: 14, color: "#6b7280", marginTop: 16, marginBottom: 8 }}>
-                Optional image
+                Optional images
               </Text>
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <TouchableOpacity
@@ -415,7 +495,7 @@ export default function CreateReelScreen() {
                   }}
                 >
                   <Ionicons name="images-outline" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700" }}>Choose</Text>
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>Choose Images</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleCapturePostImage}
@@ -434,11 +514,42 @@ export default function CreateReelScreen() {
                   <Text style={{ color: "#fff", fontWeight: "700" }}>Capture</Text>
                 </TouchableOpacity>
               </View>
-              {postImageData ? (
-                <Text style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                  Image attached to post.
-                </Text>
-              ) : null}
+              <View style={{ marginTop: 8, gap: 6 }}>
+                {postImageData.length > 0 ? (
+                  <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                    {postImageData.length} image{postImageData.length === 1 ? "" : "s"} attached.
+                  </Text>
+                ) : null}
+                {postImageData.length > 0 ? (
+                  <View style={{ marginTop: 6 }}>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "700",
+                        color: "#111827",
+                        marginBottom: 10,
+                      }}
+                    >
+                      Post preview
+                    </Text>
+                    <MultiImageGrid
+                      images={postImageData}
+                      height={320}
+                      borderRadius={24}
+                    />
+                  </View>
+                ) : null}
+                {postImageData.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => setPostImageData([])}
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#4f46e5" }}>
+                      Clear images
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </>
           )}
 
@@ -482,9 +593,16 @@ export default function CreateReelScreen() {
                 </TouchableOpacity>
               </View>
               {storyImageData ? (
-                <Text style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                  Story image ready.
-                </Text>
+                <View style={{ marginTop: 12, gap: 8 }}>
+                  <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                    Story image ready.
+                  </Text>
+                  <MultiImageGrid
+                    images={[storyImageData]}
+                    height={300}
+                    borderRadius={24}
+                  />
+                </View>
               ) : null}
             </>
           )}

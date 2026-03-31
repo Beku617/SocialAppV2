@@ -60,12 +60,28 @@ export default function ProfilePostsSection({ posts }: ProfilePostsSectionProps)
                 backgroundColor: "#f3f4f6",
               }}
             >
-              {post.imageUrl ? (
+              {(post.imageUrls?.[0] || post.imageUrl) ? (
+                <>
                 <Image
-                  source={{ uri: post.imageUrl }}
+                  source={{ uri: post.imageUrls?.[0] || post.imageUrl }}
                   style={{ width: "100%", height: "100%" }}
                   resizeMode="cover"
                 />
+                {(post.imageUrls?.length || 0) > 1 ? (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 6,
+                      right: 6,
+                      backgroundColor: "rgba(17,24,39,0.7)",
+                      borderRadius: 999,
+                      padding: 4,
+                    }}
+                  >
+                    <Ionicons name="images-outline" size={12} color="#fff" />
+                  </View>
+                ) : null}
+                </>
               ) : (
                 <View
                   style={{

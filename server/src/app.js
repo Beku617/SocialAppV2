@@ -5,6 +5,7 @@ const morgan = require("morgan");
 const fs = require("fs");
 const path = require("path");
 const { env } = require("./config/env");
+const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
 const healthRoutes = require("./routes/healthRoutes");
 const postRoutes = require("./routes/postRoutes");
@@ -51,6 +52,7 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/health", healthRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/stories", storyRoutes);

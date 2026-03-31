@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { env } = require("../config/env");
 const User = require("../models/User");
+const { ensureUserCanAccess } = require("../utils/userAccess");
 
 const requireAuth = async (req, res, next) => {
   try {
@@ -18,13 +19,29 @@ const requireAuth = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid token" });
     }
 
+    await ensureUserCanAccess(user);
     req.user = user;
     return next();
-  } catch (_error) {
+  } catch (error) {
+    return res
+      .status(error?.statusCode || 401)
+      .json({ message: error?.message || "Unauthorized" });
+  }
+};
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+
+  return next();
 };
 
 module.exports = {
   requireAuth,
+  requireAdmin,
 };

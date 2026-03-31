@@ -8,10 +8,13 @@ export {
   getUser,
   getValidToken,
   saveAuth,
+  type AuthUser,
+  type BanInfo,
   type ApiResponse,
   type Comment,
   type Post,
   type PostAuthor,
+  type UserRole,
 } from "./config";
 
 // Auth & profile management
@@ -25,14 +28,43 @@ export {
   type UserProfile,
 } from "./auth";
 
+// Session helpers
+export { getHomeRouteForUser, resolveSessionUser } from "./session";
+
+// Admin
+export {
+  banAdminUser,
+  createAdminPost,
+  createAdminReel,
+  deleteAdminPost,
+  deleteAdminReel,
+  deleteAdminUser,
+  fetchAdminPostDetails,
+  fetchAdminPosts,
+  fetchAdminReelDetails,
+  fetchAdminReels,
+  fetchAdminSummary,
+  fetchAdminUserDetails,
+  fetchAdminUsers,
+  unbanAdminUser,
+  type AdminPost,
+  type AdminReel,
+  type AdminSummary,
+  type AdminUser,
+  type AdminUserDetailsResponse,
+  type BanDuration,
+} from "./admin";
+
 // Posts
 export {
   addComment,
   createPost,
   deletePost,
+  fetchPostDetails,
   fetchPosts,
   seedPosts,
   toggleLike,
+  updatePost,
 } from "./posts";
 
 // Stories

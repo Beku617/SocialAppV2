@@ -2,23 +2,60 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
 const { generateToken } = require("../utils/generateToken");
+const { serializePost } = require("../utils/serializePost");
+const { buildBanSnapshot, ensureUserCanAccess } = require("../utils/userAccess");
+
+const buildUsernameBase = (value) => {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._]+/g, "")
+    .slice(0, 24);
+
+  return normalized || `user${Date.now().toString().slice(-6)}`;
+};
+
+const createUniqueUsername = async (name, email) => {
+  const base = buildUsernameBase(email.split("@")[0] || name);
+  let candidate = base;
+  let suffix = 1;
+
+  while (await User.exists({ username: candidate })) {
+    candidate = `${base}${suffix}`.slice(0, 30);
+    suffix += 1;
+  }
+
+  return candidate;
+};
+
+const buildAuthUserPayload = (user) => ({
+  ...user.toJSON(),
+  ban: buildBanSnapshot(user),
+});
 
 const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
+    const normalizedEmail = email.toLowerCase();
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       throw createHttpError(409, "Email already in use");
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ name, email, passwordHash });
+    const username = await createUniqueUsername(name, normalizedEmail);
+    const user = await User.create({
+      name,
+      email: normalizedEmail,
+      username,
+      passwordHash,
+      role: "user",
+    });
     const token = generateToken(user._id.toString());
 
     return res.status(201).json({
       token,
-      user: user.toJSON(),
+      user: buildAuthUserPayload(user),
     });
   } catch (error) {
     return next(error);
@@ -28,8 +65,11 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const identifier = String(email || "").trim().toLowerCase();
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier }],
+    });
     if (!user) {
       throw createHttpError(401, "Invalid email or password");
     }
@@ -39,10 +79,11 @@ const login = async (req, res, next) => {
       throw createHttpError(401, "Invalid email or password");
     }
 
+    await ensureUserCanAccess(user);
     const token = generateToken(user._id.toString());
     return res.status(200).json({
       token,
-      user: user.toJSON(),
+      user: buildAuthUserPayload(user),
     });
   } catch (error) {
     return next(error);
@@ -51,7 +92,7 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res) => {
   const user = req.user;
-  const json = user.toJSON();
+  const json = buildAuthUserPayload(user);
   json.followersCount = user.followers ? user.followers.length : 0;
   json.followingCount = user.following ? user.following.length : 0;
   return res.status(200).json({ user: json });
@@ -93,12 +134,7 @@ const changePassword = async (req, res, next) => {
 
 const deleteAccount = async (req, res, next) => {
   try {
-    const Post = require("../models/Post");
-    // Remove user's posts
-    await Post.deleteMany({ author: req.user._id });
-    // Remove the user
-    await User.deleteOne({ _id: req.user._id });
-    return res.status(200).json({ message: "Account deleted" });
+    throw createHttpError(403, "Deleting your account is not allowed");
   } catch (error) {
     return next(error);
   }
@@ -143,7 +179,8 @@ const getUserProfile = async (req, res, next) => {
     const posts = await Post.find({ author: user._id })
       .sort({ createdAt: -1 })
       .populate("author", "name avatarUrl")
-      .populate("comments.author", "name avatarUrl");
+      .populate("comments.author", "name avatarUrl")
+      .lean();
 
     const postCount = posts.length;
     const followersCount = user.followers ? user.followers.length : 0;
@@ -155,10 +192,11 @@ const getUserProfile = async (req, res, next) => {
     const json = user.toJSON();
     json.followersCount = followersCount;
     json.followingCount = followingCount;
+    json.ban = buildBanSnapshot(user);
 
     return res.status(200).json({
       user: json,
-      posts,
+      posts: posts.map(serializePost),
       postCount,
       isFollowing,
     });

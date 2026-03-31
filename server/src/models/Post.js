@@ -28,15 +28,18 @@ const postSchema = new mongoose.Schema(
     },
     text: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
-      minlength: 1,
       maxlength: 2200,
     },
     imageUrl: {
       type: String,
       default: "",
       trim: true,
+    },
+    imageUrls: {
+      type: [String],
+      default: [],
     },
     likes: [
       {

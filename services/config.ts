@@ -33,7 +33,28 @@ const USER_KEY = "auth_user";
 const SESSION_EXPIRES_KEY = "auth_session_expires_at";
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-export async function saveAuth(token: string, user: any) {
+export type UserRole = "user" | "admin";
+
+export interface BanInfo {
+  active: boolean;
+  permanent: boolean;
+  expiresAt: string | null;
+  label: string;
+}
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  username?: string;
+  role: UserRole;
+  avatarUrl: string;
+  bio: string;
+  createdAt?: string;
+  ban?: BanInfo;
+}
+
+export async function saveAuth(token: string, user: AuthUser) {
   const sessionExpiresAt = Date.now() + SESSION_DURATION_MS;
   await AsyncStorage.setItem(TOKEN_KEY, token);
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -44,9 +65,9 @@ export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
-export async function getUser(): Promise<any | null> {
+export async function getUser(): Promise<AuthUser | null> {
   const raw = await AsyncStorage.getItem(USER_KEY);
-  return raw ? JSON.parse(raw) : null;
+  return raw ? (JSON.parse(raw) as AuthUser) : null;
 }
 
 export async function clearAuth() {
@@ -95,6 +116,7 @@ export interface Post {
   author: PostAuthor;
   text: string;
   imageUrl: string;
+  imageUrls: string[];
   likes: string[];
   comments: Comment[];
   createdAt: string;

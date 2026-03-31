@@ -22,13 +22,35 @@ export async function fetchPosts(): Promise<ApiResponse<Post[]>> {
   }
 }
 
+export async function fetchPostDetails(postId: string): Promise<ApiResponse<Post>> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/posts/${postId}`);
+    const json = await response.json();
+
+    if (!response.ok) {
+      return { error: json.message || "Failed to fetch post" };
+    }
+
+    return { data: json.post };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
 export async function createPost(
   text: string,
-  imageUrl?: string,
+  imageUrls?: string[],
 ): Promise<ApiResponse<Post>> {
   try {
     const token = await getValidToken();
     if (!token) return { error: "Session expired. Please sign in again." };
+
+    const normalizedImageUrls = Array.isArray(imageUrls)
+      ? imageUrls.filter(
+          (imageUrl): imageUrl is string =>
+            typeof imageUrl === "string" && imageUrl.trim().length > 0,
+        )
+      : [];
 
     const response = await fetch(`${BASE_URL}/api/posts`, {
       method: "POST",
@@ -36,12 +58,55 @@ export async function createPost(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ text, imageUrl: imageUrl || "" }),
+      body: JSON.stringify({
+        text,
+        imageUrl: normalizedImageUrls[0] || "",
+        imageUrls: normalizedImageUrls,
+      }),
     });
 
     const json = await response.json();
     if (!response.ok) {
       return { error: json.message || "Failed to create post" };
+    }
+    return { data: json.post };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
+export async function updatePost(
+  postId: string,
+  text: string,
+  imageUrls?: string[],
+): Promise<ApiResponse<Post>> {
+  try {
+    const token = await getValidToken();
+    if (!token) return { error: "Session expired. Please sign in again." };
+
+    const normalizedImageUrls = Array.isArray(imageUrls)
+      ? imageUrls.filter(
+          (imageUrl): imageUrl is string =>
+            typeof imageUrl === "string" && imageUrl.trim().length > 0,
+        )
+      : [];
+
+    const response = await fetch(`${BASE_URL}/api/posts/${postId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        text,
+        imageUrl: normalizedImageUrls[0] || "",
+        imageUrls: normalizedImageUrls,
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      return { error: json.message || "Failed to update post" };
     }
     return { data: json.post };
   } catch (err: any) {

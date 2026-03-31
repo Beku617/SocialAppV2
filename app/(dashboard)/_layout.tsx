@@ -9,7 +9,11 @@ import { router, withLayoutContext } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getValidToken } from "../../services/api";
+import {
+  getHomeRouteForUser,
+  getValidToken,
+  resolveSessionUser,
+} from "../../services/api";
 
 const { Navigator } = createBottomTabNavigator();
 
@@ -34,6 +38,14 @@ export default function DashboardLayout() {
 
       if (!token) {
         router.replace("/(tabs)");
+        return;
+      }
+
+      const sessionUser = await resolveSessionUser();
+      if (!mounted) return;
+
+      if (sessionUser?.role === "admin") {
+        router.replace(getHomeRouteForUser(sessionUser) as any);
         return;
       }
 

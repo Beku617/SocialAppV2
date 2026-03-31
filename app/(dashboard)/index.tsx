@@ -23,6 +23,9 @@ import {
 } from "../../services/api";
 
 import ChatModal from "../../components/dashboard/ChatModal";
+import CreateOptionsSheet from "../../components/dashboard/CreateOptionsSheet";
+import FeedLoadingScreen from "../../components/dashboard/FeedLoadingScreen";
+import FeedActionDialog from "../../components/dashboard/FeedActionDialog";
 import Header from "../../components/dashboard/Header";
 import PostCard from "../../components/dashboard/PostCard";
 import SearchModal from "../../components/dashboard/SearchModal";
@@ -42,12 +45,26 @@ export default function HomeScreen() {
   const [viewingStory, setViewingStory] = useState<StoryGroup | null>(null);
   const [creatingStory, setCreatingStory] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
+  const [createOptionsVisible, setCreateOptionsVisible] = useState(false);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [chatTarget, setChatTarget] = useState<{
     userId: string;
     name: string;
     avatar: string;
   } | null>(null);
+  const [dialogState, setDialogState] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    primaryLabel: string;
+    secondaryLabel?: string;
+    tone?: "default" | "success" | "danger" | "warning";
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+    primaryLabel: "OK",
+  });
 
 
   const loadData = async () => {
@@ -118,6 +135,41 @@ export default function HomeScreen() {
     [currentUserId],
   );
 
+  const handleRemovePost = useCallback((postId: string) => {
+    setPosts((prev) => prev.filter((post) => post.id !== postId));
+  }, []);
+
+  const handleHideAuthor = useCallback((authorId: string) => {
+    setPosts((prev) => prev.filter((post) => post.author.id !== authorId));
+  }, []);
+
+  const closeDialog = useCallback(() => {
+    setDialogState((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const handleCreateOptionSelect = useCallback(
+    (option: "post" | "story" | "reel" | "live") => {
+      setCreateOptionsVisible(false);
+
+      if (option === "live") {
+        setDialogState({
+          visible: true,
+          title: "Live is coming soon",
+          message: "Live creation is not available yet. You can already create posts, stories, and reels.",
+          primaryLabel: "OK",
+          tone: "default",
+        });
+        return;
+      }
+
+      router.push({
+        pathname: "/create-reel",
+        params: { mode: option },
+      });
+    },
+    [],
+  );
+
   // ─── Create Story ──────────────────────────────────────────────────
   const handleCreateStory = async () => {
     if (creatingStory) return;
@@ -169,9 +221,11 @@ export default function HomeScreen() {
         post={item}
         currentUserId={currentUserId}
         onLikeToggled={handleLikeToggled}
+        onRemovePost={handleRemovePost}
+        onHideAuthor={handleHideAuthor}
       />
     ),
-    [currentUserId, handleLikeToggled],
+    [currentUserId, handleHideAuthor, handleLikeToggled, handleRemovePost],
   );
 
   const ListHeader = useCallback(
@@ -193,26 +247,10 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#f9fafb",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-        <Header
-          avatarUrl={userAvatar}
-          userName={userName}
-          onSearchPress={() => setSearchVisible(true)}
-          onCreatePress={() => router.push("/create-reel")}
-        />
-        <ActivityIndicator size="large" color="#4f46e5" />
-        <Text style={{ marginTop: 12, color: "#9ca3af", fontSize: 14 }}>
-          Loading posts...
-        </Text>
-      </View>
+      <>
+        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+        <FeedLoadingScreen />
+      </>
     );
   }
 
@@ -223,7 +261,7 @@ export default function HomeScreen() {
         avatarUrl={userAvatar}
         userName={userName}
         onSearchPress={() => setSearchVisible(true)}
-        onCreatePress={() => router.push("/create-reel")}
+        onCreatePress={() => setCreateOptionsVisible(true)}
       />
 
       {/* Creating story indicator */}
@@ -332,6 +370,22 @@ export default function HomeScreen() {
         userAvatar={chatTarget?.avatar ?? ""}
         currentUserId={currentUserId}
         onClose={() => setChatTarget(null)}
+      />
+
+      <CreateOptionsSheet
+        visible={createOptionsVisible}
+        onClose={() => setCreateOptionsVisible(false)}
+        onSelect={handleCreateOptionSelect}
+      />
+
+      <FeedActionDialog
+        visible={dialogState.visible}
+        title={dialogState.title}
+        message={dialogState.message}
+        primaryLabel={dialogState.primaryLabel}
+        secondaryLabel={dialogState.secondaryLabel}
+        tone={dialogState.tone}
+        onPrimary={closeDialog}
       />
     </View>
   );

@@ -38,7 +38,10 @@ router.post(
 router.post(
   "/login",
   [
-    body("email").trim().isEmail().withMessage("Provide a valid email"),
+    body("email")
+      .trim()
+      .isLength({ min: 1 })
+      .withMessage("Provide an email or username"),
     body("password").isString().notEmpty().withMessage("Password is required"),
     validateRequest,
   ],

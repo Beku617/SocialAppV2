@@ -12,7 +12,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   changePassword,
   clearAuth,
-  deleteAccount,
   fetchPosts,
   getFollowersList,
   getFollowingList,
@@ -170,28 +169,6 @@ export default function ProfileScreen() {
     setNewPw("");
   };
 
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "This will permanently delete your account and all posts. Are you sure?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const { error } = await deleteAccount();
-            if (error) {
-              Alert.alert("Error", error);
-              return;
-            }
-            router.replace("/(tabs)");
-          },
-        },
-      ],
-    );
-  };
-
   const openFollowers = async () => {
     if (!profile) return;
     setFollowListTitle("Followers");
@@ -268,7 +245,6 @@ export default function ProfileScreen() {
           onOpenEditProfile={openEditProfile}
           onOpenChangePassword={() => setPwVisible(true)}
           onOpenMessages={() => setConvosVisible(true)}
-          onDeleteAccount={handleDeleteAccount}
         />
         <ProfileLogoutButton onLogout={handleLogout} />
       </ScrollView>

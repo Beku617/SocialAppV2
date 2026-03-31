@@ -5,7 +5,6 @@ type ProfileSettingsSectionProps = {
   onOpenEditProfile: () => void;
   onOpenChangePassword: () => void;
   onOpenMessages: () => void;
-  onDeleteAccount: () => void;
 };
 
 const SETTINGS_ITEMS = [
@@ -39,19 +38,12 @@ const SETTINGS_ITEMS = [
     color: "#6b7280",
     action: "help" as const,
   },
-  {
-    icon: "trash-outline",
-    label: "Delete Account",
-    color: "#ef4444",
-    action: "delete" as const,
-  },
 ];
 
 export default function ProfileSettingsSection({
   onOpenEditProfile,
   onOpenChangePassword,
   onOpenMessages,
-  onDeleteAccount,
 }: ProfileSettingsSectionProps) {
   const handlePress = (action: (typeof SETTINGS_ITEMS)[number]["action"]) => {
     if (action === "edit") {
@@ -65,9 +57,6 @@ export default function ProfileSettingsSection({
     if (action === "messages") {
       onOpenMessages();
       return;
-    }
-    if (action === "delete") {
-      onDeleteAccount();
     }
   };
 
@@ -121,7 +110,7 @@ export default function ProfileSettingsSection({
               flex: 1,
               fontSize: 15,
               fontWeight: "500",
-              color: item.color === "#ef4444" ? "#ef4444" : "#374151",
+              color: "#374151",
             }}
           >
             {item.label}
