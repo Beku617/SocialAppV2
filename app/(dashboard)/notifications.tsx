@@ -11,8 +11,8 @@ const NOTIFICATIONS = [
     time: "Just now",
     read: false,
     icon: "sparkles",
-    iconColor: "#4f46e5",
-    iconBg: "#eef2ff",
+    iconColor: "#818cf8",
+    iconBg: "#312e81",
   },
   {
     id: "2",
@@ -22,8 +22,8 @@ const NOTIFICATIONS = [
     time: "5m ago",
     read: false,
     icon: "images",
-    iconColor: "#0ea5e9",
-    iconBg: "#f0f9ff",
+    iconColor: "#38bdf8",
+    iconBg: "#082f49",
   },
   {
     id: "3",
@@ -34,7 +34,7 @@ const NOTIFICATIONS = [
     read: false,
     icon: "trending-up",
     iconColor: "#f59e0b",
-    iconBg: "#fffbeb",
+    iconBg: "#422006",
   },
   {
     id: "4",
@@ -44,8 +44,8 @@ const NOTIFICATIONS = [
     time: "1h ago",
     read: true,
     icon: "chatbubble",
-    iconColor: "#10b981",
-    iconBg: "#ecfdf5",
+    iconColor: "#34d399",
+    iconBg: "#064e3b",
   },
   {
     id: "5",
@@ -55,8 +55,8 @@ const NOTIFICATIONS = [
     time: "3h ago",
     read: true,
     icon: "bar-chart",
-    iconColor: "#8b5cf6",
-    iconBg: "#f5f3ff",
+    iconColor: "#a78bfa",
+    iconBg: "#3b0764",
   },
   {
     id: "6",
@@ -66,8 +66,8 @@ const NOTIFICATIONS = [
     time: "5h ago",
     read: true,
     icon: "at",
-    iconColor: "#4f46e5",
-    iconBg: "#eef2ff",
+    iconColor: "#818cf8",
+    iconBg: "#312e81",
   },
   {
     id: "7",
@@ -77,8 +77,8 @@ const NOTIFICATIONS = [
     time: "8h ago",
     read: true,
     icon: "videocam",
-    iconColor: "#ef4444",
-    iconBg: "#fef2f2",
+    iconColor: "#f87171",
+    iconBg: "#7f1d1d",
   },
   {
     id: "8",
@@ -88,8 +88,8 @@ const NOTIFICATIONS = [
     time: "1d ago",
     read: true,
     icon: "person-add",
-    iconColor: "#4f46e5",
-    iconBg: "#eef2ff",
+    iconColor: "#818cf8",
+    iconBg: "#312e81",
   },
 ];
 
@@ -106,10 +106,10 @@ function NotificationCard({
         marginHorizontal: 20,
         marginBottom: 12,
         padding: 16,
-        backgroundColor: notification.read ? "#ffffff" : "#f9fafb",
+        backgroundColor: notification.read ? "#0b1220" : "#111827",
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: notification.read ? "#f3f4f6" : "#e5e7eb",
+        borderColor: notification.read ? "#1f2937" : "#374151",
       }}
     >
       {/* Icon */}
@@ -144,7 +144,7 @@ function NotificationCard({
             style={{
               fontSize: 15,
               fontWeight: "700",
-              color: "#111827",
+              color: "#f9fafb",
               flex: 1,
               marginRight: 8,
             }}
@@ -166,7 +166,7 @@ function NotificationCard({
         <Text
           style={{
             fontSize: 13,
-            color: "#6b7280",
+            color: "#9ca3af",
             lineHeight: 18,
             marginTop: 3,
           }}
@@ -174,7 +174,7 @@ function NotificationCard({
         >
           {notification.text}
         </Text>
-        <Text style={{ fontSize: 12, color: "#9ca3af", marginTop: 6 }}>
+        <Text style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
           {notification.time}
         </Text>
       </View>
@@ -189,7 +189,7 @@ export default function NotificationsScreen() {
   const readNotifications = NOTIFICATIONS.filter((n) => n.read);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#ffffff" }}>
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
       {/* Header */}
       <View
         style={{
@@ -197,13 +197,13 @@ export default function NotificationsScreen() {
           paddingHorizontal: 20,
           paddingBottom: 20,
           borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          borderBottomColor: "#1f2937",
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
         }}
       >
-        <Text style={{ fontSize: 28, fontWeight: "800", color: "#111827" }}>
+        <Text style={{ fontSize: 28, fontWeight: "800", color: "#ffffff" }}>
           Notifications
         </Text>
         <TouchableOpacity
@@ -211,12 +211,12 @@ export default function NotificationsScreen() {
             width: 38,
             height: 38,
             borderRadius: 12,
-            backgroundColor: "#f3f4f6",
+            backgroundColor: "#111827",
             justifyContent: "center",
             alignItems: "center",
           }}
         >
-          <Ionicons name="settings-outline" size={20} color="#6b7280" />
+          <Ionicons name="settings-outline" size={20} color="#d1d5db" />
         </TouchableOpacity>
       </View>
 
@@ -233,7 +233,7 @@ export default function NotificationsScreen() {
         ]}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: 20, paddingTop: 4 }}
         renderItem={({ item }) => {
           if (item.type === "header") {
             return (
@@ -251,7 +251,7 @@ export default function NotificationsScreen() {
                   style={{
                     fontSize: 16,
                     fontWeight: "700",
-                    color: "#111827",
+                    color: "#ffffff",
                   }}
                 >
                   {item.title}
@@ -261,7 +261,7 @@ export default function NotificationsScreen() {
                     <Text
                       style={{
                         fontSize: 13,
-                        color: "#4f46e5",
+                        color: "#818cf8",
                         fontWeight: "600",
                       }}
                     >

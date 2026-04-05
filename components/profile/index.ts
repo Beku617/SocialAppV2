@@ -3,5 +3,4 @@ export { default as EditProfileModal } from "./EditProfileModal";
 export { default as ProfileHeader } from "./ProfileHeader";
 export { default as ProfileLogoutButton } from "./ProfileLogoutButton";
 export { default as ProfilePostsSection } from "./ProfilePostsSection";
-export { default as ProfileSettingsSection } from "./ProfileSettingsSection";
 export { default as ProfileSummarySection } from "./ProfileSummarySection";

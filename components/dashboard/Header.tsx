@@ -18,12 +18,12 @@ export default function Header({
   return (
     <View
       style={{
-        backgroundColor: "rgba(255,255,255,0.95)",
+        backgroundColor: "#000000",
         paddingTop: insets.top + 6,
         paddingHorizontal: 14,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "#f3f4f6",
+        borderBottomColor: "#1f2937",
       }}
     >
       <View
@@ -53,12 +53,12 @@ export default function Header({
               width: 42,
               height: 42,
               borderRadius: 21,
-              backgroundColor: "#f9fafb",
+              backgroundColor: "#111827",
               justifyContent: "center",
               alignItems: "center",
             }}
           >
-            <Ionicons name="search-outline" size={20} color="#6b7280" />
+            <Ionicons name="search-outline" size={20} color="#d1d5db" />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={onCreatePress}
@@ -66,7 +66,7 @@ export default function Header({
               width: 42,
               height: 42,
               borderRadius: 21,
-              backgroundColor: "#f9fafb",
+              backgroundColor: "#111827",
               justifyContent: "center",
               alignItems: "center",
             }}
@@ -74,7 +74,7 @@ export default function Header({
             <Ionicons
               name="add-circle-outline"
               size={22}
-              color="#6b7280"
+              color="#d1d5db"
             />
           </TouchableOpacity>
         </View>

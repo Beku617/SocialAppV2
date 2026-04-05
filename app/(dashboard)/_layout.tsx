@@ -5,10 +5,12 @@ import {
   createBottomTabNavigator,
 } from "@react-navigation/bottom-tabs";
 import { ParamListBase, TabNavigationState } from "@react-navigation/native";
+import * as SystemUI from "expo-system-ui";
 import { router, withLayoutContext } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { DASHBOARD_NAV_THEME } from "../../constants/navigation-theme";
 import {
   getHomeRouteForUser,
   getValidToken,
@@ -26,7 +28,12 @@ const DashboardTabs = withLayoutContext<
 
 export default function DashboardLayout() {
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, Platform.OS === "ios" ? 12 : 2);
+  const bottomInset = Math.max(
+    insets.bottom,
+    Platform.OS === "ios"
+      ? DASHBOARD_NAV_THEME.iosExtraBottomInset
+      : DASHBOARD_NAV_THEME.androidExtraBottomInset,
+  );
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
@@ -59,6 +66,14 @@ export default function DashboardLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      SystemUI.setBackgroundColorAsync(
+        DASHBOARD_NAV_THEME.androidSystemNavigationColor,
+      ).catch(() => {});
+    }
+  }, []);
+
   if (!authChecked) {
     return (
       <View
@@ -76,32 +91,24 @@ export default function DashboardLayout() {
 
   return (
     <DashboardTabs
-      screenOptions={({ route }) => {
-        const isReelsTab = route.name === "videos";
-        const isMessagesTab = route.name === "messages";
-        const isDarkTab = isReelsTab || isMessagesTab;
-
-        return {
-          headerShown: false,
-          tabBarActiveTintColor: isDarkTab ? "#ffffff" : "#4f46e5",
-          tabBarInactiveTintColor: isDarkTab
-            ? "rgba(255,255,255,0.7)"
-            : "#9ca3af",
-          tabBarShowLabel: false,
-          tabBarItemStyle: {
-            flex: 1,
-          },
-          tabBarStyle: {
-            backgroundColor: isDarkTab ? "#000000" : "#ffffff",
-            borderTopWidth: 1,
-            borderTopColor: isDarkTab ? "rgba(255,255,255,0.12)" : "#f3f4f6",
-            height: (isDarkTab ? 50 : 52) + bottomInset,
-            paddingTop: isDarkTab ? 4 : 6,
-            paddingBottom: bottomInset,
-            elevation: 0,
-            shadowOpacity: 0,
-          },
-        };
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: DASHBOARD_NAV_THEME.tabBarActiveTintColor,
+        tabBarInactiveTintColor: DASHBOARD_NAV_THEME.tabBarInactiveTintColor,
+        tabBarShowLabel: false,
+        tabBarItemStyle: {
+          flex: 1,
+        },
+        tabBarStyle: {
+          backgroundColor: DASHBOARD_NAV_THEME.tabBarBackgroundColor,
+          borderTopWidth: 1,
+          borderTopColor: DASHBOARD_NAV_THEME.tabBarBorderColor,
+          height: DASHBOARD_NAV_THEME.tabBarHeight + bottomInset,
+          paddingTop: DASHBOARD_NAV_THEME.tabBarPaddingTop,
+          paddingBottom: bottomInset,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
       }}
     >
       <DashboardTabs.Screen

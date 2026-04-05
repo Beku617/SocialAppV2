@@ -24,11 +24,19 @@ export default function StoriesSection({
     `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=4f46e5&color=fff`;
 
   return (
-    <View style={{ paddingTop: 6, paddingBottom: 6 }}>
+    <View
+      style={{
+        paddingTop: 6,
+        paddingBottom: 10,
+        backgroundColor: "#000000",
+        borderBottomWidth: 1,
+        borderBottomColor: "#111827",
+      }}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 10, gap: 6 }}
+        contentContainerStyle={{ paddingHorizontal: 10, gap: 8 }}
       >
         {/* Your Story / Add Story */}
         <TouchableOpacity
@@ -39,21 +47,21 @@ export default function StoriesSection({
             style={{
               width: 80,
               height: 80,
-              borderRadius: 40,
-              padding: 3,
-              backgroundColor: "#f3f4f6",
-            }}
-          >
-            <View
-              style={{
-                flex: 1,
-                borderRadius: 38,
-                borderWidth: 2,
-                borderColor: "#fff",
-                overflow: "hidden",
-                backgroundColor: "#f3f4f6",
+                borderRadius: 40,
+                padding: 3,
+                backgroundColor: "#111827",
               }}
             >
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: 38,
+                  borderWidth: 2,
+                  borderColor: "#1f2937",
+                  overflow: "hidden",
+                  backgroundColor: "#111827",
+                }}
+              >
               <Image
                 source={{
                   uri: currentUserAvatar,
@@ -71,11 +79,11 @@ export default function StoriesSection({
                 width: 24,
                 height: 24,
                 borderRadius: 12,
-                backgroundColor: "#7aa8df",
+                backgroundColor: "#4f46e5",
                 justifyContent: "center",
                 alignItems: "center",
                 borderWidth: 2,
-                borderColor: "#fff",
+                borderColor: "#0b1220",
               }}
             >
               <Ionicons name="add" size={16} color="#fff" />
@@ -85,7 +93,7 @@ export default function StoriesSection({
             style={{
               fontSize: 12,
               fontWeight: "500",
-              color: "#6b7280",
+              color: "#9ca3af",
               marginTop: 8,
               textAlign: "center",
             }}
@@ -106,7 +114,7 @@ export default function StoriesSection({
                 height: 80,
                 borderRadius: 40,
                 padding: 3,
-                backgroundColor: "#8db3e6",
+                backgroundColor: "#4f46e5",
               }}
             >
               <View
@@ -114,9 +122,9 @@ export default function StoriesSection({
                   flex: 1,
                   borderRadius: 38,
                   borderWidth: 2,
-                  borderColor: "#fff",
+                  borderColor: "#0b1220",
                   overflow: "hidden",
-                  backgroundColor: "#f3f4f6",
+                  backgroundColor: "#111827",
                 }}
               >
                 <Image
@@ -130,7 +138,7 @@ export default function StoriesSection({
               style={{
                 fontSize: 12,
                 fontWeight: "500",
-                color: "#6b7280",
+                color: "#9ca3af",
                 marginTop: 8,
                 textAlign: "center",
               }}
@@ -154,7 +162,7 @@ export default function StoriesSection({
                 height: 80,
                 borderRadius: 40,
                 padding: 3,
-                backgroundColor: "#8db3e6",
+                backgroundColor: "#4f46e5",
               }}
             >
               <View
@@ -162,9 +170,9 @@ export default function StoriesSection({
                   flex: 1,
                   borderRadius: 38,
                   borderWidth: 2,
-                  borderColor: "#fff",
+                  borderColor: "#0b1220",
                   overflow: "hidden",
-                  backgroundColor: "#f3f4f6",
+                  backgroundColor: "#111827",
                 }}
               >
                 <Image
@@ -182,7 +190,7 @@ export default function StoriesSection({
               style={{
                 fontSize: 12,
                 fontWeight: "500",
-                color: "#6b7280",
+                color: "#9ca3af",
                 marginTop: 8,
                 textAlign: "center",
               }}

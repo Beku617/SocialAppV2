@@ -117,7 +117,7 @@ export default function MultiImageGrid({
           flex: 1,
           minHeight: 0,
           overflow: "hidden",
-          backgroundColor: "#d1d5db",
+          backgroundColor: "#1f2937",
         },
         style,
       ]}
@@ -205,7 +205,7 @@ export default function MultiImageGrid({
           height,
           borderRadius,
           overflow: "hidden",
-          backgroundColor: "#e5e7eb",
+          backgroundColor: "#111827",
         }}
       >
         {renderPreview()}

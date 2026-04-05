@@ -10,29 +10,23 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  changePassword,
-  clearAuth,
+  fetchMyReels,
   fetchPosts,
   getFollowersList,
   getFollowingList,
   getMe,
   updateProfile,
   type Post,
+  type Reel,
   type SearchUserResult,
   type UserProfile,
 } from "../../services/api";
 import {
-  ChangePasswordModal,
   EditProfileModal,
   ProfileHeader,
-  ProfileLogoutButton,
   ProfilePostsSection,
-  ProfileSettingsSection,
   ProfileSummarySection,
 } from "../../components/profile";
-
-import ChatModal from "../../components/dashboard/ChatModal";
-import ConversationsModal from "../../components/dashboard/ConversationsModal";
 import UsersListModal from "../../components/dashboard/UsersListModal";
 
 // ─── Main Profile Screen ────────────────────────────────────────────────
@@ -40,6 +34,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [myReels, setMyReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -50,12 +45,6 @@ export default function ProfileScreen() {
   const [editAvatar, setEditAvatar] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Change password modal
-  const [pwVisible, setPwVisible] = useState(false);
-  const [currentPw, setCurrentPw] = useState("");
-  const [newPw, setNewPw] = useState("");
-  const [changingPw, setChangingPw] = useState(false);
-
   // Followers / following modals
   const [followListVisible, setFollowListVisible] = useState(false);
   const [followListTitle, setFollowListTitle] = useState("Followers");
@@ -64,16 +53,12 @@ export default function ProfileScreen() {
   );
   const [followListLoading, setFollowListLoading] = useState(false);
 
-  // Conversations + Chat
-  const [convosVisible, setConvosVisible] = useState(false);
-  const [chatTarget, setChatTarget] = useState<{
-    userId: string;
-    name: string;
-    avatar: string;
-  } | null>(null);
-
   const loadData = async () => {
-    const [profileRes, postsRes] = await Promise.all([getMe(), fetchPosts()]);
+    const [profileRes, postsRes, reelsRes] = await Promise.all([
+      getMe(),
+      fetchPosts(),
+      fetchMyReels(),
+    ]);
     if (profileRes.data) {
       setProfile(profileRes.data);
     }
@@ -82,6 +67,9 @@ export default function ProfileScreen() {
         (p) => p.author.id === profileRes.data!.id,
       );
       setMyPosts(mine);
+    }
+    if (reelsRes.data) {
+      setMyReels(reelsRes.data);
     }
   };
 
@@ -94,11 +82,6 @@ export default function ProfileScreen() {
     await loadData();
     setRefreshing(false);
   }, []);
-
-  const handleLogout = async () => {
-    await clearAuth();
-    router.replace("/(tabs)");
-  };
 
   const openEditProfile = () => {
     if (!profile) return;
@@ -147,28 +130,6 @@ export default function ProfileScreen() {
     setEditVisible(false);
   };
 
-  const handleChangePassword = async () => {
-    if (!currentPw || !newPw) {
-      Alert.alert("Error", "Please fill in both fields");
-      return;
-    }
-    if (newPw.length < 8) {
-      Alert.alert("Error", "New password must be at least 8 characters");
-      return;
-    }
-    setChangingPw(true);
-    const { error } = await changePassword(currentPw, newPw);
-    setChangingPw(false);
-    if (error) {
-      Alert.alert("Error", error);
-      return;
-    }
-    Alert.alert("Success", "Password updated!");
-    setPwVisible(false);
-    setCurrentPw("");
-    setNewPw("");
-  };
-
   const openFollowers = async () => {
     if (!profile) return;
     setFollowListTitle("Followers");
@@ -200,7 +161,7 @@ export default function ProfileScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: "#ffffff",
+          backgroundColor: "#000000",
           justifyContent: "center",
           alignItems: "center",
         }}
@@ -211,15 +172,16 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#ffffff" }}>
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
       <ProfileHeader
         title={profile?.name || "Profile"}
         topInset={insets.top}
-        onOpenMessages={() => setConvosVisible(true)}
+        onOpenSettings={() => router.push("/settings-activity")}
       />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ backgroundColor: "#000000" }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -240,13 +202,7 @@ export default function ProfileScreen() {
           onOpenFollowers={openFollowers}
           onOpenFollowing={openFollowing}
         />
-        <ProfilePostsSection posts={myPosts} />
-        <ProfileSettingsSection
-          onOpenEditProfile={openEditProfile}
-          onOpenChangePassword={() => setPwVisible(true)}
-          onOpenMessages={() => setConvosVisible(true)}
-        />
-        <ProfileLogoutButton onLogout={handleLogout} />
+        <ProfilePostsSection posts={myPosts} reels={myReels} />
       </ScrollView>
 
       <EditProfileModal
@@ -263,22 +219,6 @@ export default function ProfileScreen() {
         onEditBioChange={setEditBio}
       />
 
-      <ChangePasswordModal
-        visible={pwVisible}
-        bottomInset={insets.bottom}
-        currentPassword={currentPw}
-        newPassword={newPw}
-        changingPassword={changingPw}
-        onCancel={() => {
-          setPwVisible(false);
-          setCurrentPw("");
-          setNewPw("");
-        }}
-        onSave={handleChangePassword}
-        onCurrentPasswordChange={setCurrentPw}
-        onNewPasswordChange={setNewPw}
-      />
-
       {/* ── Followers/Following List Modal ─────────────────────────── */}
       <UsersListModal
         visible={followListVisible}
@@ -286,27 +226,6 @@ export default function ProfileScreen() {
         users={followListUsers}
         loading={followListLoading}
         onClose={() => setFollowListVisible(false)}
-      />
-
-      {/* ── Conversations Modal ────────────────────────────────────── */}
-      <ConversationsModal
-        visible={convosVisible}
-        currentUserId={profile?.id ?? null}
-        onClose={() => setConvosVisible(false)}
-        onOpenChat={(userId, name, avatar) => {
-          setConvosVisible(false);
-          setChatTarget({ userId, name, avatar });
-        }}
-      />
-
-      {/* ── Chat Modal ─────────────────────────────────────────────── */}
-      <ChatModal
-        visible={chatTarget !== null}
-        userId={chatTarget?.userId ?? null}
-        userName={chatTarget?.name ?? ""}
-        userAvatar={chatTarget?.avatar ?? ""}
-        currentUserId={profile?.id ?? null}
-        onClose={() => setChatTarget(null)}
       />
     </View>
   );

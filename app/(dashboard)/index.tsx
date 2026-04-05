@@ -248,15 +248,15 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <>
-        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
         <FeedLoadingScreen />
       </>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
       <Header
         avatarUrl={userAvatar}
         userName={userName}
@@ -326,6 +326,7 @@ export default function HomeScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        style={{ backgroundColor: "#000000" }}
         contentContainerStyle={{ paddingBottom: 8 }}
       />
 

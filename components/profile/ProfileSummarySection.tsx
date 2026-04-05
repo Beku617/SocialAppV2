@@ -33,6 +33,7 @@ export default function ProfileSummarySection({
           paddingHorizontal: 20,
           paddingTop: 20,
           paddingBottom: 12,
+          backgroundColor: "#000000",
         }}
       >
         <TouchableOpacity onPress={onOpenEditProfile}>
@@ -62,35 +63,35 @@ export default function ProfileSummarySection({
           }}
         >
           <View style={{ alignItems: "center" }}>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: "#f9fafb" }}>
               {postsCount}
             </Text>
-            <Text style={{ fontSize: 13, color: "#6b7280" }}>posts</Text>
+            <Text style={{ fontSize: 13, color: "#9ca3af" }}>posts</Text>
           </View>
           <TouchableOpacity onPress={onOpenFollowers} style={{ alignItems: "center" }}>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: "#f9fafb" }}>
               {followersCount}
             </Text>
-            <Text style={{ fontSize: 13, color: "#6b7280" }}>followers</Text>
+            <Text style={{ fontSize: 13, color: "#9ca3af" }}>followers</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onOpenFollowing} style={{ alignItems: "center" }}>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: "#f9fafb" }}>
               {followingCount}
             </Text>
-            <Text style={{ fontSize: 13, color: "#6b7280" }}>following</Text>
+            <Text style={{ fontSize: 13, color: "#9ca3af" }}>following</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={{ paddingHorizontal: 20, paddingBottom: 14 }}>
-        <Text style={{ fontSize: 15, fontWeight: "700", color: "#111827" }}>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 14, backgroundColor: "#000000" }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: "#f9fafb" }}>
           {displayName}
         </Text>
         {bio ? (
           <Text
             style={{
               fontSize: 14,
-              color: "#374151",
+              color: "#d1d5db",
               marginTop: 3,
               lineHeight: 19,
             }}
@@ -110,45 +111,52 @@ export default function ProfileSummarySection({
           gap: 8,
           paddingHorizontal: 20,
           paddingBottom: 16,
+          backgroundColor: "#000000",
         }}
       >
         <TouchableOpacity
           onPress={onOpenEditProfile}
           style={{
             flex: 1,
-            backgroundColor: "#f3f4f6",
+            backgroundColor: "#111827",
+            borderWidth: 1,
+            borderColor: "#1f2937",
             paddingVertical: 9,
             borderRadius: 10,
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#111827", fontWeight: "600", fontSize: 14 }}>
+          <Text style={{ color: "#f9fafb", fontWeight: "600", fontSize: 14 }}>
             Edit profile
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={{
             flex: 1,
-            backgroundColor: "#f3f4f6",
+            backgroundColor: "#111827",
+            borderWidth: 1,
+            borderColor: "#1f2937",
             paddingVertical: 9,
             borderRadius: 10,
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#111827", fontWeight: "600", fontSize: 14 }}>
+          <Text style={{ color: "#f9fafb", fontWeight: "600", fontSize: 14 }}>
             Share profile
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={{
             width: 38,
-            backgroundColor: "#f3f4f6",
+            backgroundColor: "#111827",
+            borderWidth: 1,
+            borderColor: "#1f2937",
             borderRadius: 10,
             justifyContent: "center",
             alignItems: "center",
           }}
         >
-          <Ionicons name="person-add-outline" size={18} color="#111827" />
+          <Ionicons name="person-add-outline" size={18} color="#f9fafb" />
         </TouchableOpacity>
       </View>
     </>

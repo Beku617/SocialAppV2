@@ -53,7 +53,7 @@ export default function FeedLoadingScreen() {
     <View
       style={{
         flex: 1,
-        backgroundColor: "#f8fafc",
+        backgroundColor: "#000000",
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 28,
@@ -65,7 +65,7 @@ export default function FeedLoadingScreen() {
           width: 104,
           height: 104,
           borderRadius: 52,
-          backgroundColor: "#c7d2fe",
+          backgroundColor: "#312e81",
           opacity: haloOpacity,
           transform: [{ scale: haloScale }],
         }}

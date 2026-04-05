@@ -35,7 +35,7 @@ export function CreatePostBar({
     <View style={{ paddingHorizontal: 0, marginTop: 2, marginBottom: 6 }}>
       <View
         style={{
-          backgroundColor: "#ffffff",
+          backgroundColor: "#0b1220",
           borderRadius: 0,
           padding: 12,
           paddingHorizontal: 14,
@@ -43,7 +43,7 @@ export function CreatePostBar({
           alignItems: "center",
           gap: 12,
           borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          borderBottomColor: "#1f2937",
         }}
       >
         <Image
@@ -58,10 +58,10 @@ export function CreatePostBar({
           style={{
             flex: 1,
             fontSize: 14,
-            color: "#374151",
+            color: "#d1d5db",
           }}
           placeholder="What's inspiring you?"
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor="#6b7280"
           editable={false}
         />
         <TouchableOpacity
@@ -310,14 +310,14 @@ export default function PostCard({
     <>
       <View
         style={{
-          backgroundColor: "#ffffff",
+          backgroundColor: "#0b1220",
           borderRadius: 0,
           marginHorizontal: 0,
           marginBottom: 6,
           overflow: "hidden",
           elevation: 0,
           borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          borderBottomColor: "#1f2937",
         }}
       >
         {/* Header */}
@@ -341,7 +341,7 @@ export default function PostCard({
             />
             <View>
               <Text
-                style={{ fontSize: 14, fontWeight: "bold", color: "#111827" }}
+                style={{ fontSize: 14, fontWeight: "bold", color: "#f9fafb" }}
               >
                 {post.author.name}
               </Text>
@@ -351,7 +351,7 @@ export default function PostCard({
             </View>
           </View>
           <TouchableOpacity onPress={() => setMenuVisible(true)}>
-            <Ionicons name="ellipsis-vertical" size={18} color="#9ca3af" />
+            <Ionicons name="ellipsis-vertical" size={18} color="#6b7280" />
           </TouchableOpacity>
         </View>
 
@@ -366,7 +366,7 @@ export default function PostCard({
             <Text
               style={{
                 fontSize: 14,
-                color: "#4b5563",
+                color: "#d1d5db",
                 lineHeight: 21,
               }}
             >
@@ -409,13 +409,13 @@ export default function PostCard({
               <Ionicons
                 name={liked ? "heart" : "heart-outline"}
                 size={24}
-                color={liked ? "#ef4444" : "#6b7280"}
+                color={liked ? "#ef4444" : "#9ca3af"}
               />
               <Text
                 style={{
                   fontSize: 14,
                   fontWeight: "500",
-                  color: liked ? "#ef4444" : "#6b7280",
+                  color: liked ? "#ef4444" : "#9ca3af",
                 }}
               >
                 {formatCount(likeCount)}
@@ -424,14 +424,14 @@ export default function PostCard({
             <TouchableOpacity
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <Ionicons name="chatbubble-outline" size={22} color="#6b7280" />
-              <Text style={{ fontSize: 14, fontWeight: "500", color: "#6b7280" }}>
+              <Ionicons name="chatbubble-outline" size={22} color="#9ca3af" />
+              <Text style={{ fontSize: 14, fontWeight: "500", color: "#9ca3af" }}>
                 {formatCount(post.comments.length)}
               </Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity>
-            <Ionicons name="share-outline" size={22} color="#6b7280" />
+            <Ionicons name="share-outline" size={22} color="#9ca3af" />
           </TouchableOpacity>
         </View>
       </View>
