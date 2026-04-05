@@ -3,17 +3,14 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import * as Notifications from "expo-notifications";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
+import { Platform } from "react-native";
 import "react-native-reanimated";
 
+import { registerPushToken } from "../services/api";
 import { useColorScheme } from "../hooks/use-color-scheme";
-import {
-  registerForPushNotificationsAsync,
-  setupNotificationChannel,
-} from "../notifications";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -22,16 +19,70 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
-  const notificationListener = useRef<Notifications.EventSubscription | null>(
-    null,
-  );
-  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const notificationListener = useRef<{ remove: () => void } | null>(null);
+  const responseListener = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    let disposed = false;
+
     async function initNotifications() {
       try {
+        const {
+          getNotificationsModule,
+          registerForPushNotificationsAsync,
+          setupNotificationChannel,
+        } = await import("../notifications");
+
+        const Notifications = await getNotificationsModule();
+        if (!Notifications || disposed) return;
+
         await setupNotificationChannel();
-        await registerForPushNotificationsAsync();
+        const expoPushToken = await registerForPushNotificationsAsync();
+        if (disposed) return;
+
+        if (expoPushToken) {
+          await registerPushToken(expoPushToken);
+        }
+
+        notificationListener.current =
+          Notifications.addNotificationReceivedListener((notification) => {
+            console.log("Notification received:", notification);
+          });
+
+        responseListener.current =
+          Notifications.addNotificationResponseReceivedListener((response) => {
+            const data = response.notification.request.content.data as
+              | {
+                  type?: string;
+                  userId?: string;
+                  userName?: string;
+                }
+              | undefined;
+
+            if (data?.type === "dm" && typeof data.userId === "string") {
+              router.push({
+                pathname: "/(dashboard)/messages",
+                params: {
+                  userId: data.userId,
+                  userName:
+                    typeof data.userName === "string" ? data.userName : "",
+                },
+              });
+              return;
+            }
+
+            if (
+              data?.type === "post_like" ||
+              data?.type === "post_comment"
+            ) {
+              router.push("/(dashboard)/notifications");
+              return;
+            }
+
+            console.log("Notification tapped:", response);
+          });
       } catch (error) {
         console.warn("[notifications] init failed:", error);
       }
@@ -39,17 +90,8 @@ export default function RootLayout() {
 
     void initNotifications();
 
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("Notification received:", notification);
-      });
-
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notification tapped:", response);
-      });
-
     return () => {
+      disposed = true;
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };

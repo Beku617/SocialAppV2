@@ -1,6 +1,7 @@
 const Message = require("../models/Message");
 const User = require("../models/User");
-const createHttpError = require("../utils/httpError");
+const { createHttpError } = require("../utils/httpError");
+const { createUserNotification } = require("../utils/notificationCenter");
 
 // GET /api/messages/conversations — list all conversations (latest message per user)
 const getConversations = async (req, res, next) => {
@@ -145,6 +146,28 @@ const sendMessage = async (req, res, next) => {
       receiver: otherUserId,
       text: text.trim(),
     });
+
+    try {
+      await createUserNotification({
+        userId: otherUserId,
+        type: "dm",
+        title: req.user?.name || "New message",
+        body: message.text,
+        data: {
+          type: "dm",
+          userId: currentUserId.toString(),
+          userName: req.user?.name || "",
+          messageId: message._id.toString(),
+        },
+        push: {
+          enabled: true,
+          tokens: otherUser.expoPushTokens || [],
+          channelId: "messages",
+        },
+      });
+    } catch (notificationError) {
+      console.warn("[dm] notification dispatch failed:", notificationError);
+    }
 
     return res.status(201).json({
       message: {

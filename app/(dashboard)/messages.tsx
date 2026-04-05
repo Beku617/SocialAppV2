@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,6 +21,8 @@ import {
   getConversations,
   getMe,
   getMessages,
+  getUserProfile,
+  registerPushToken,
   searchUsers,
   toggleFollow,
   type ChatMessage,
@@ -27,6 +30,7 @@ import {
   type SearchUserResult,
   type UserProfile,
 } from "../../services/api";
+import { sendLocalNotification } from "../../notifications";
 
 // ─── IG Dark Theme Colors ───────────────────────────────────────────────
 const COLORS = {
@@ -68,13 +72,22 @@ function ChatScreen({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const latestMessageIdRef = useRef<string | null>(null);
+  const hasHydratedMessagesRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
     setMessages([]);
+    hasHydratedMessagesRef.current = false;
+    latestMessageIdRef.current = null;
     (async () => {
       const res = await getMessages(userId);
-      if (res.data) setMessages(res.data.messages);
+      if (res.data) {
+        setMessages(res.data.messages);
+        const latest = res.data.messages[res.data.messages.length - 1];
+        latestMessageIdRef.current = latest ? latest.id : null;
+        hasHydratedMessagesRef.current = true;
+      }
       setLoading(false);
       setTimeout(
         () => flatListRef.current?.scrollToEnd({ animated: false }),
@@ -84,12 +97,42 @@ function ChatScreen({
   }, [userId]);
 
   useEffect(() => {
+    let stoppedByNetworkError = false;
     const interval = setInterval(async () => {
+      if (stoppedByNetworkError) return;
+
       const res = await getMessages(userId);
-      if (res.data) setMessages(res.data.messages);
+      if (res.data) {
+        const list = res.data.messages;
+        const latest = list[list.length - 1];
+
+        if (
+          hasHydratedMessagesRef.current &&
+          latest &&
+          latest.id !== latestMessageIdRef.current &&
+          latest.senderId !== currentUserId
+        ) {
+          void sendLocalNotification({
+            title: userName || "New message",
+            body: latest.text,
+            data: { type: "dm", userId, userName },
+          });
+        }
+
+        latestMessageIdRef.current = latest
+          ? latest.id
+          : latestMessageIdRef.current;
+        setMessages(list);
+        return;
+      }
+
+      if (res.error?.toLowerCase().includes("network")) {
+        stoppedByNetworkError = true;
+        clearInterval(interval);
+      }
     }, 4000);
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [currentUserId, userId, userName]);
 
   const handleSend = async () => {
     if (!text.trim() || sending) return;
@@ -450,6 +493,10 @@ function formatActivityTime(dateStr: string): string {
 
 // ─── Messages Tab Screen (IG Style) ─────────────────────────────────────
 export default function MessagesScreen() {
+  const params = useLocalSearchParams<{
+    userId?: string | string[];
+    userName?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -471,6 +518,18 @@ export default function MessagesScreen() {
     name: string;
     avatar: string;
   } | null>(null);
+  const openedFromNotificationRef = useRef<string | null>(null);
+  const lastSeenConversationMessageRef = useRef<Map<string, string>>(
+    new Map(),
+  );
+  const conversationsReadyRef = useRef(false);
+
+  const dmUserIdParam = Array.isArray(params.userId)
+    ? params.userId[0]
+    : params.userId;
+  const dmUserNameParam = Array.isArray(params.userName)
+    ? params.userName[0]
+    : params.userName;
 
   useEffect(() => {
     (async () => {
@@ -483,6 +542,56 @@ export default function MessagesScreen() {
     loadConversations();
     loadSuggestedUsers();
   }, []);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    let cancelled = false;
+
+    const syncPushToken = async () => {
+      try {
+        const { registerForPushNotificationsAsync } = await import(
+          "../../notifications"
+        );
+        const token = await registerForPushNotificationsAsync();
+        if (!token || cancelled) return;
+        await registerPushToken(token);
+      } catch (error) {
+        console.warn("[messages] push token sync failed:", error);
+      }
+    };
+
+    void syncPushToken();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!dmUserIdParam || openedFromNotificationRef.current === dmUserIdParam) {
+      return;
+    }
+
+    let mounted = true;
+
+    const openDmFromNotification = async () => {
+      const profileRes = await getUserProfile(dmUserIdParam);
+      if (!mounted) return;
+
+      const profileUser = profileRes.data?.user;
+      setChatTarget({
+        userId: dmUserIdParam,
+        name: profileUser?.name || dmUserNameParam || "User",
+        avatar: profileUser?.avatarUrl || "",
+      });
+      openedFromNotificationRef.current = dmUserIdParam;
+    };
+
+    void openDmFromNotification();
+
+    return () => {
+      mounted = false;
+    };
+  }, [dmUserIdParam, dmUserNameParam]);
 
   const loadSuggestedUsers = async () => {
     // Fetch users with broad queries to get suggestions
@@ -528,22 +637,73 @@ export default function MessagesScreen() {
     setProfileVisible(true);
   };
 
+  const handleNewConversationNotifications = (
+    list: ConversationItem[],
+  ) => {
+    for (const convo of list) {
+      const lastId = convo.lastMessage?.id;
+      const prevId = lastSeenConversationMessageRef.current.get(convo.user.id);
+      const shouldNotify =
+        conversationsReadyRef.current &&
+        !!currentUserId &&
+        !!lastId &&
+        prevId !== lastId &&
+        convo.lastMessage.senderId !== currentUserId;
+
+      if (lastId) {
+        lastSeenConversationMessageRef.current.set(convo.user.id, lastId);
+      }
+
+      if (shouldNotify) {
+        void sendLocalNotification({
+          title: convo.user.name || "New message",
+          body: convo.lastMessage.text,
+          data: {
+            type: "dm",
+            userId: convo.user.id,
+            userName: convo.user.name,
+          },
+        });
+      }
+    }
+
+    if (!conversationsReadyRef.current) {
+      conversationsReadyRef.current = true;
+    }
+  };
+
   const loadConversations = async () => {
-    setLoading(true);
+    const firstLoad = !conversationsReadyRef.current;
+    if (firstLoad) setLoading(true);
     const res = await getConversations();
-    if (res.data) setConversations(res.data);
-    setLoading(false);
+    if (res.data) {
+      handleNewConversationNotifications(res.data);
+      setConversations(res.data);
+    }
+    if (firstLoad) setLoading(false);
   };
 
   // Poll when on conversation list
   useEffect(() => {
     if (chatTarget) return;
+    let stoppedByNetworkError = false;
     const interval = setInterval(async () => {
+      if (stoppedByNetworkError) return;
+
       const res = await getConversations();
-      if (res.data) setConversations(res.data);
+      if (res.data) {
+        handleNewConversationNotifications(res.data);
+        setConversations(res.data);
+        return;
+      }
+
+      if (res.error?.toLowerCase().includes("network")) {
+        stoppedByNetworkError = true;
+        clearInterval(interval);
+      }
     }, 5000);
     return () => clearInterval(interval);
-  }, [chatTarget]);
+  }, [chatTarget, currentUserId]);
 
   // Search users
   useEffect(() => {

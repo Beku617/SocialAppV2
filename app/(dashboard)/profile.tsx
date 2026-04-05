@@ -1,5 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   fetchMyReels,
   fetchPosts,
+  getSavedPostIds,
   getFollowersList,
   getFollowingList,
   getMe,
@@ -35,6 +36,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [myReels, setMyReels] = useState<Reel[]>([]);
+  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -67,6 +69,16 @@ export default function ProfileScreen() {
         (p) => p.author.id === profileRes.data!.id,
       );
       setMyPosts(mine);
+
+      const savedIds = await getSavedPostIds();
+      const savedIdSet = new Set(savedIds);
+      const saved = postsRes.data.filter((p) => savedIdSet.has(p.id));
+      setSavedPosts(saved);
+    } else if (postsRes.data) {
+      const savedIds = await getSavedPostIds();
+      const savedIdSet = new Set(savedIds);
+      const saved = postsRes.data.filter((p) => savedIdSet.has(p.id));
+      setSavedPosts(saved);
     }
     if (reelsRes.data) {
       setMyReels(reelsRes.data);
@@ -76,6 +88,12 @@ export default function ProfileScreen() {
   useEffect(() => {
     loadData().finally(() => setLoading(false));
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, []),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -202,7 +220,7 @@ export default function ProfileScreen() {
           onOpenFollowers={openFollowers}
           onOpenFollowing={openFollowing}
         />
-        <ProfilePostsSection posts={myPosts} reels={myReels} />
+        <ProfilePostsSection posts={myPosts} reels={myReels} savedPosts={savedPosts} />
       </ScrollView>
 
       <EditProfileModal

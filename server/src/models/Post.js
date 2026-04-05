@@ -48,6 +48,10 @@ const postSchema = new mongoose.Schema(
       },
     ],
     comments: [commentSchema],
+    notificationsEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

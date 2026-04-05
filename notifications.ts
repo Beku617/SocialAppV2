@@ -1,8 +1,9 @@
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { Alert, Platform } from "react-native";
 
-// Controls how notifications appear when received
+// Backup-aligned notification handler behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -11,6 +12,11 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+export async function getNotificationsModule() {
+  if (Platform.OS === "web") return null;
+  return Notifications;
+}
 
 // Create Android notification channel
 export async function setupNotificationChannel() {
@@ -28,7 +34,7 @@ export async function setupNotificationChannel() {
   }
 }
 
-// Ask user for permission
+// Ask user for permission + fetch expo token for DM remote push
 export async function registerForPushNotificationsAsync() {
   try {
     if (!Device.isDevice) {
@@ -50,20 +56,38 @@ export async function registerForPushNotificationsAsync() {
       return null;
     }
 
-    return true;
+    const projectId =
+      Constants.easConfig?.projectId ??
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.expoConfig?.extra?.projectId;
+
+    const tokenResponse = projectId
+      ? await Notifications.getExpoPushTokenAsync({ projectId })
+      : await Notifications.getExpoPushTokenAsync();
+
+    return tokenResponse.data || null;
   } catch (error) {
     console.warn("[notifications] register permission failed:", error);
     return null;
   }
 }
 
-// Local test notification
-export async function sendLocalNotification() {
+type LocalNotificationOptions = {
+  title?: string;
+  body?: string;
+  data?: Record<string, any>;
+};
+
+// Local test notification (also reused for DM alerts)
+export async function sendLocalNotification(options: LocalNotificationOptions = {}) {
   await setupNotificationChannel();
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "Test Notification",
-      body: "Hi. It is Beku. This is a test notification.",
+      title: options.title ?? "Test Notification",
+      body:
+        options.body ??
+        "Hi. It is Beku. This is a test notification.",
+      data: options.data,
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

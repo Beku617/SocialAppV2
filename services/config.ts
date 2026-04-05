@@ -119,6 +119,7 @@ export interface Post {
   imageUrls: string[];
   likes: string[];
   comments: Comment[];
+  notificationsEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

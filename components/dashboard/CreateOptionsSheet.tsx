@@ -3,7 +3,7 @@ import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type CreateOption = {
-  key: "post" | "story" | "reel" | "live";
+  key: "post" | "story" | "reel";
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 };
@@ -12,7 +12,6 @@ const OPTIONS: CreateOption[] = [
   { key: "post", label: "Post", icon: "create-outline" },
   { key: "story", label: "Story", icon: "book-outline" },
   { key: "reel", label: "Reel", icon: "film-outline" },
-  { key: "live", label: "Live", icon: "videocam-outline" },
 ];
 
 export default function CreateOptionsSheet({

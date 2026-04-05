@@ -10,6 +10,23 @@ import {
 
 const USER_KEY = "auth_user";
 
+async function syncPushTokenAfterAuth() {
+  try {
+    const { Platform } = await import("react-native");
+    if (Platform.OS === "web") return;
+
+    const { registerForPushNotificationsAsync } = await import(
+      "../notifications"
+    );
+    const expoPushToken = await registerForPushNotificationsAsync();
+    if (!expoPushToken) return;
+
+    await registerPushToken(expoPushToken);
+  } catch (error) {
+    console.warn("[auth] push token sync failed:", error);
+  }
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────
 interface AuthResponse {
   token: string;
@@ -39,6 +56,13 @@ export async function registerUser(
     const json = await response.json();
 
     if (!response.ok) {
+      if (response.status === 409) {
+        const loginFallback = await loginUser(email, password);
+        if (loginFallback.data) {
+          return { data: loginFallback.data };
+        }
+      }
+
       const errorMsg =
         json.message ||
         json.error ||
@@ -48,6 +72,7 @@ export async function registerUser(
     }
 
     await saveAuth(json.token, json.user);
+    await syncPushTokenAfterAuth();
     return { data: json };
   } catch (err: any) {
     return { error: err.message || "Network error – is the server running?" };
@@ -74,6 +99,7 @@ export async function loginUser(
     }
 
     await saveAuth(json.token, json.user);
+    await syncPushTokenAfterAuth();
     return { data: json };
   } catch (err: any) {
     return { error: err.message || "Network error – is the server running?" };
@@ -175,6 +201,32 @@ export async function deleteAccount(): Promise<
     }
     const { clearAuth } = await import("./config");
     await clearAuth();
+    return { data: json };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
+export async function registerPushToken(
+  token: string,
+): Promise<ApiResponse<{ ok: boolean }>> {
+  try {
+    const authToken = await getValidToken();
+    if (!authToken) return { error: "Not authenticated" };
+
+    const response = await fetch(`${BASE_URL}/api/auth/push-token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ token }),
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      return { error: json.message || "Failed to register push token" };
+    }
     return { data: json };
   } catch (err: any) {
     return { error: err.message || "Network error" };

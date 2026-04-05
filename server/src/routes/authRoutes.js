@@ -4,6 +4,7 @@ const {
   getMe,
   login,
   register,
+  savePushToken,
   updateProfile,
   changePassword,
   deleteAccount,
@@ -49,6 +50,16 @@ router.post(
 );
 
 router.get("/me", requireAuth, getMe);
+
+router.post(
+  "/push-token",
+  requireAuth,
+  [
+    body("token").isString().notEmpty().withMessage("Push token is required"),
+    validateRequest,
+  ],
+  savePushToken,
+);
 
 router.put(
   "/me",

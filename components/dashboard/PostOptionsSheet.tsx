@@ -171,32 +171,6 @@ export default function PostOptionsSheet({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 6 }}
           >
-            <SheetCard>
-              <Text
-                style={{
-                  fontSize: 17,
-                  fontWeight: "700",
-                  color: "#2563eb",
-                  lineHeight: 24,
-                }}
-              >
-                Why am I seeing this post?
-              </Text>
-              <Text
-                style={{
-                  marginTop: 12,
-                  fontSize: 16,
-                  lineHeight: 24,
-                  color: "#111827",
-                  fontWeight: "500",
-                }}
-              >
-                {isOwner
-                  ? "This post appears in your feed because you created it."
-                  : `Posts from ${authorName} and people you interact with can appear in your feed.`}
-              </Text>
-            </SheetCard>
-
             {isOwner ? (
               <SheetCard>
                 <OptionItem

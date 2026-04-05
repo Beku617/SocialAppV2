@@ -56,6 +56,10 @@ const serializePost = (post) => {
     comments: Array.isArray(post?.comments)
       ? post.comments.map(serializeComment)
       : [],
+    notificationsEnabled:
+      typeof post?.notificationsEnabled === "boolean"
+        ? post.notificationsEnabled
+        : true,
     createdAt: post?.createdAt || null,
     updatedAt: post?.updatedAt || null,
   };

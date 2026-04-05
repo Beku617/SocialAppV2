@@ -4,6 +4,7 @@ const { createHttpError } = require("../utils/httpError");
 const { generateToken } = require("../utils/generateToken");
 const { serializePost } = require("../utils/serializePost");
 const { buildBanSnapshot, ensureUserCanAccess } = require("../utils/userAccess");
+const { isExpoPushToken } = require("../utils/pushNotifications");
 
 const buildUsernameBase = (value) => {
   const normalized = String(value || "")
@@ -96,6 +97,24 @@ const getMe = async (req, res) => {
   json.followersCount = user.followers ? user.followers.length : 0;
   json.followingCount = user.following ? user.following.length : 0;
   return res.status(200).json({ user: json });
+};
+
+const savePushToken = async (req, res, next) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (!isExpoPushToken(token)) {
+      throw createHttpError(400, "Invalid push token");
+    }
+
+    await User.updateOne(
+      { _id: req.user._id },
+      { $addToSet: { expoPushTokens: token } },
+    );
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
 };
 
 const updateProfile = async (req, res, next) => {
@@ -299,6 +318,7 @@ module.exports = {
   register,
   login,
   getMe,
+  savePushToken,
   updateProfile,
   changePassword,
   deleteAccount,

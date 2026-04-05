@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   Dimensions,
@@ -16,7 +17,7 @@ const GRID_SIZE = (SCREEN_WIDTH - GRID_GAP * 2) / 3;
 const FIXED_ROWS = 6;
 const MIN_GRID_SLOTS = FIXED_ROWS * 3;
 const GRID_MIN_HEIGHT = FIXED_ROWS * GRID_SIZE + (FIXED_ROWS - 1) * GRID_GAP;
-type TabKey = "posts" | "reels";
+type TabKey = "posts" | "reels" | "saved";
 type GridItem =
   | { kind: "post"; id: string; post: Post }
   | { kind: "reel"; id: string; reel: Reel }
@@ -25,20 +26,26 @@ type GridItem =
 type ProfilePostsSectionProps = {
   posts: Post[];
   reels: Reel[];
+  savedPosts: Post[];
 };
 
 export default function ProfilePostsSection({
   posts,
   reels,
+  savedPosts,
 }: ProfilePostsSectionProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("posts");
 
   const gridData = useMemo<GridItem[]>(
     () => {
       const items: GridItem[] =
-        activeTab === "posts"
-          ? posts.map((post) => ({ kind: "post" as const, id: post.id, post }))
-          : reels.map((reel) => ({ kind: "reel" as const, id: reel.id, reel }));
+        activeTab === "reels"
+          ? reels.map((reel) => ({ kind: "reel" as const, id: reel.id, reel }))
+          : (activeTab === "posts" ? posts : savedPosts).map((post) => ({
+              kind: "post" as const,
+              id: post.id,
+              post,
+            }));
 
       const placeholders: GridItem[] = Array.from(
         { length: Math.max(0, MIN_GRID_SLOTS - items.length) },
@@ -50,10 +57,22 @@ export default function ProfilePostsSection({
 
       return [...items, ...placeholders];
     },
-    [activeTab, posts, reels],
+    [activeTab, posts, reels, savedPosts],
   );
 
   const isPostsTab = activeTab === "posts";
+  const isReelsTab = activeTab === "reels";
+  const isSavedTab = activeTab === "saved";
+
+  const openGridItem = (item: GridItem) => {
+    if (item.kind === "reel") {
+      router.push("/(dashboard)/videos");
+      return;
+    }
+    if (item.kind === "post") {
+      router.push("/(dashboard)");
+    }
+  };
 
   const renderItem = ({ item, index }: { item: GridItem; index: number }) => (
     <>
@@ -67,7 +86,9 @@ export default function ProfilePostsSection({
           }}
         />
       ) : (
-        <View
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => openGridItem(item)}
           style={{
             width: GRID_SIZE,
             height: GRID_SIZE,
@@ -157,7 +178,7 @@ export default function ProfilePostsSection({
               <Ionicons name="play-circle-outline" size={22} color="#a5b4fc" />
             </View>
           )}
-        </View>
+        </TouchableOpacity>
       )}
     </>
   );
@@ -197,14 +218,28 @@ export default function ProfilePostsSection({
           onPress={() => setActiveTab("reels")}
           style={{
             borderBottomWidth: 2,
-            borderBottomColor: !isPostsTab ? "#4f46e5" : "transparent",
+            borderBottomColor: isReelsTab ? "#4f46e5" : "transparent",
             paddingBottom: 10,
           }}
         >
           <Ionicons
             name="play-outline"
             size={24}
-            color={!isPostsTab ? "#f9fafb" : "#6b7280"}
+            color={isReelsTab ? "#f9fafb" : "#6b7280"}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab("saved")}
+          style={{
+            borderBottomWidth: 2,
+            borderBottomColor: isSavedTab ? "#4f46e5" : "transparent",
+            paddingBottom: 10,
+          }}
+        >
+          <Ionicons
+            name={isSavedTab ? "bookmark" : "bookmark-outline"}
+            size={22}
+            color={isSavedTab ? "#f9fafb" : "#6b7280"}
           />
         </TouchableOpacity>
       </View>

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -12,6 +12,9 @@ import {
 } from "react-native";
 import {
   deletePost as apiDeletePost,
+  isPostSaved,
+  toggleSavedPost,
+  togglePostNotifications,
   toggleLike as apiToggleLike,
   type Post,
 } from "../../services/api";
@@ -83,12 +86,14 @@ export default function PostCard({
   currentUserId,
   onLikeToggled,
   onRemovePost,
+  onHidePost,
   onHideAuthor,
 }: {
   post: Post;
   currentUserId: string | null;
   onLikeToggled: (postId: string, liked: boolean, count: number) => void;
   onRemovePost: (postId: string) => void;
+  onHidePost: (postId: string) => void;
   onHideAuthor: (authorId: string) => void;
 }) {
   const imageUrls =
@@ -103,7 +108,9 @@ export default function PostCard({
   const [likeCount, setLikeCount] = useState(post.likes.length);
   const [menuVisible, setMenuVisible] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    post.notificationsEnabled ?? true,
+  );
   const [dialogState, setDialogState] = useState<{
     visible: boolean;
     title: string;
@@ -156,6 +163,24 @@ export default function PostCard({
       onSecondary,
     });
   };
+
+  useEffect(() => {
+    setNotificationsEnabled(post.notificationsEnabled ?? true);
+  }, [post.id, post.notificationsEnabled]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    isPostSaved(post.id).then((value) => {
+      if (mounted) {
+        setSaved(value);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [post.id]);
 
   const handleLike = async () => {
     const prev = liked;
@@ -232,10 +257,10 @@ export default function PostCard({
     });
   };
 
-  const handleToggleSaved = () => {
-    const nextSaved = !saved;
-    setSaved(nextSaved);
+  const handleToggleSaved = async () => {
     setMenuVisible(false);
+    const nextSaved = await toggleSavedPost(post.id);
+    setSaved(nextSaved);
     openDialog({
       title: nextSaved ? "Post saved" : "Removed from saved",
       message: nextSaved
@@ -249,7 +274,7 @@ export default function PostCard({
 
   const handleHidePost = () => {
     setMenuVisible(false);
-    onRemovePost(post.id);
+    onHidePost(post.id);
   };
 
   const handleReportPost = () => {
@@ -263,15 +288,43 @@ export default function PostCard({
     });
   };
 
-  const handleToggleNotifications = () => {
-    const nextEnabled = !notificationsEnabled;
-    setNotificationsEnabled(nextEnabled);
+  const handleToggleNotifications = async () => {
+    if (!isOwner) {
+      const nextEnabled = !notificationsEnabled;
+      setNotificationsEnabled(nextEnabled);
+      setMenuVisible(false);
+      openDialog({
+        title: nextEnabled ? "Notifications on" : "Notifications off",
+        message: nextEnabled
+          ? "You’ll get updates when people interact with this post."
+          : "You’ll stop getting updates for this post.",
+        primaryLabel: "OK",
+        tone: "success",
+        onPrimary: closeDialog,
+      });
+      return;
+    }
+
     setMenuVisible(false);
+    const result = await togglePostNotifications(post.id);
+    if (!result.data) {
+      openDialog({
+        title: "Update failed",
+        message: result.error || "Failed to update post notifications.",
+        primaryLabel: "Close",
+        tone: "warning",
+        onPrimary: closeDialog,
+      });
+      return;
+    }
+
+    const nextEnabled = result.data.notificationsEnabled;
+    setNotificationsEnabled(nextEnabled);
     openDialog({
-      title: nextEnabled ? "Notifications on" : "Notifications off",
+      title: "Notification preference updated",
       message: nextEnabled
-        ? "You’ll get updates when people interact with this post."
-        : "You’ll stop getting updates for this post.",
+        ? "Updates for this post will appear in your Notifications page only."
+        : "Updates for this post will appear in your Notifications page and lock screen.",
       primaryLabel: "OK",
       tone: "success",
       onPrimary: closeDialog,
@@ -279,7 +332,7 @@ export default function PostCard({
   };
 
   const handleCopyLink = async () => {
-    await Clipboard.setStringAsync(`${BASE_URL}/api/posts/${post.id}`);
+    await Clipboard.setStringAsync(`${BASE_URL}/posts/${post.id}`);
     setMenuVisible(false);
     openDialog({
       title: "Link copied",

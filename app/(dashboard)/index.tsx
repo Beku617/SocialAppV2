@@ -15,8 +15,10 @@ import {
   createStory,
   fetchPosts,
   fetchStories,
+  getHiddenPostIds,
   getMe,
   getUser,
+  hidePost,
   seedPosts,
   type Post,
   type StoryGroup,
@@ -74,12 +76,16 @@ export default function HomeScreen() {
     ]);
 
     if (postsResult.data && postsResult.data.length > 0) {
-      setPosts(postsResult.data);
+      const hiddenPostIds = new Set(await getHiddenPostIds());
+      setPosts(postsResult.data.filter((post) => !hiddenPostIds.has(post.id)));
     } else if (postsResult.data && postsResult.data.length === 0) {
       console.log("[HOME] No posts found, seeding...");
       await seedPosts();
       const retry = await fetchPosts();
-      if (retry.data) setPosts(retry.data);
+      if (retry.data) {
+        const hiddenPostIds = new Set(await getHiddenPostIds());
+        setPosts(retry.data.filter((post) => !hiddenPostIds.has(post.id)));
+      }
     }
 
     if (storiesResult.data) {
@@ -143,24 +149,18 @@ export default function HomeScreen() {
     setPosts((prev) => prev.filter((post) => post.author.id !== authorId));
   }, []);
 
+  const handleHidePost = useCallback(async (postId: string) => {
+    await hidePost(postId);
+    setPosts((prev) => prev.filter((post) => post.id !== postId));
+  }, []);
+
   const closeDialog = useCallback(() => {
     setDialogState((prev) => ({ ...prev, visible: false }));
   }, []);
 
   const handleCreateOptionSelect = useCallback(
-    (option: "post" | "story" | "reel" | "live") => {
+    (option: "post" | "story" | "reel") => {
       setCreateOptionsVisible(false);
-
-      if (option === "live") {
-        setDialogState({
-          visible: true,
-          title: "Live is coming soon",
-          message: "Live creation is not available yet. You can already create posts, stories, and reels.",
-          primaryLabel: "OK",
-          tone: "default",
-        });
-        return;
-      }
 
       router.push({
         pathname: "/create-reel",
@@ -222,10 +222,17 @@ export default function HomeScreen() {
         currentUserId={currentUserId}
         onLikeToggled={handleLikeToggled}
         onRemovePost={handleRemovePost}
+        onHidePost={handleHidePost}
         onHideAuthor={handleHideAuthor}
       />
     ),
-    [currentUserId, handleHideAuthor, handleLikeToggled, handleRemovePost],
+    [
+      currentUserId,
+      handleHideAuthor,
+      handleHidePost,
+      handleLikeToggled,
+      handleRemovePost,
+    ],
   );
 
   const ListHeader = useCallback(

@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
 const ReelComment = require("../models/ReelComment");
 const Reel = require("../models/Reel");
+const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
+const { createUserNotification } = require("../utils/notificationCenter");
 
 const toIdString = (value) => {
   if (!value) return "";
@@ -136,6 +138,38 @@ const addComment = async (req, res, next) => {
     const totalCount = await ReelComment.countDocuments({ reel: reelId });
     reel.commentsCount = totalCount;
     await reel.save();
+
+    const reelAuthorId = reel.author.toString();
+    if (reelAuthorId !== currentUserId) {
+      try {
+        const reelAuthor = await User.findById(reelAuthorId).select(
+          "expoPushTokens",
+        );
+        await createUserNotification({
+          userId: reelAuthorId,
+          type: "reel_comment",
+          title: `${req.user?.name || "Someone"} commented on your reel`,
+          body: text.slice(0, 160) || "Someone commented on your reel.",
+          data: {
+            type: "reel_comment",
+            reelId: reel._id.toString(),
+            commentId: comment._id.toString(),
+            actorId: currentUserId,
+            actorName: req.user?.name || "",
+          },
+          push: {
+            enabled: true,
+            tokens: reelAuthor?.expoPushTokens || [],
+            channelId: "messages",
+          },
+        });
+      } catch (notificationError) {
+        console.warn(
+          "[reel_comment] notification dispatch failed:",
+          notificationError,
+        );
+      }
+    }
 
     await comment.populate("author", "name avatarUrl");
 

@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const Reel = require("../models/Reel");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
+const { createUserNotification } = require("../utils/notificationCenter");
 
 const ALLOWED_VISIBILITY = ["public", "followers", "private"];
 const LOCAL_REEL_UPLOAD_LIMIT_BYTES = 40 * 1024 * 1024; // 40MB
@@ -566,6 +567,36 @@ const toggleLike = async (req, res, next) => {
     }
     reel.likesCount = reel.likes.length;
     await reel.save();
+
+    const authorId = reel.author.toString();
+    if (liked && authorId !== userId) {
+      try {
+        const reelAuthor = await User.findById(authorId).select(
+          "expoPushTokens",
+        );
+        await createUserNotification({
+          userId: authorId,
+          type: "reel_like",
+          title: `${req.user?.name || "Someone"} liked your reel`,
+          body: reel.caption
+            ? reel.caption.slice(0, 120)
+            : "Someone reacted to your reel.",
+          data: {
+            type: "reel_like",
+            reelId: reel._id.toString(),
+            actorId: userId,
+            actorName: req.user?.name || "",
+          },
+          push: {
+            enabled: true,
+            tokens: reelAuthor?.expoPushTokens || [],
+            channelId: "messages",
+          },
+        });
+      } catch (notificationError) {
+        console.warn("[reel_like] notification dispatch failed:", notificationError);
+      }
+    }
 
     return res.status(200).json({
       liked,

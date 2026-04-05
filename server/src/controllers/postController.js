@@ -3,6 +3,7 @@ const Post = require("../models/Post");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
 const { normalizeImageUrls, serializePost } = require("../utils/serializePost");
+const { createUserNotification } = require("../utils/notificationCenter");
 const bcrypt = require("bcryptjs");
 
 const listPosts = async (_req, res, next) => {
@@ -54,6 +55,7 @@ const createPost = async (req, res, next) => {
       imageUrls,
       likes: [],
       comments: [],
+      notificationsEnabled: true,
     });
 
     const createdPost = await Post.findById(post._id)
@@ -122,6 +124,33 @@ const toggleLike = async (req, res, next) => {
     }
 
     await post.save();
+
+    const authorId = post.author.toString();
+    if (liked && authorId !== userId) {
+      const postAuthor = await User.findById(authorId).select(
+        "expoPushTokens",
+      );
+      await createUserNotification({
+        userId: authorId,
+        type: "post_like",
+        title: `${req.user?.name || "Someone"} liked your post`,
+        body: post.text
+          ? post.text.slice(0, 120)
+          : "Someone reacted to your post.",
+        data: {
+          type: "post_like",
+          postId: post._id.toString(),
+          actorId: userId,
+          actorName: req.user?.name || "",
+        },
+        push: {
+          enabled: !post.notificationsEnabled,
+          tokens: postAuthor?.expoPushTokens || [],
+          channelId: "messages",
+        },
+      });
+    }
+
     return res.status(200).json({
       liked,
       likeCount: post.likes.length,
@@ -134,7 +163,7 @@ const toggleLike = async (req, res, next) => {
 const addComment = async (req, res, next) => {
   try {
     const { postId } = req.params;
-    const { text } = req.body;
+    const text = String(req.body?.text || "").trim();
     const post = await Post.findById(postId);
 
     if (!post) {
@@ -149,7 +178,58 @@ const addComment = async (req, res, next) => {
     await post.populate("comments.author", "name avatarUrl");
 
     const comment = post.comments[post.comments.length - 1];
+
+    const authorId = post.author.toString();
+    const actorId = req.user._id.toString();
+    if (authorId !== actorId) {
+      const postAuthor = await User.findById(authorId).select(
+        "expoPushTokens",
+      );
+      await createUserNotification({
+        userId: authorId,
+        type: "post_comment",
+        title: `${req.user?.name || "Someone"} commented on your post`,
+        body: text.slice(0, 160) || "Someone commented on your post.",
+        data: {
+          type: "post_comment",
+          postId: post._id.toString(),
+          commentId: comment._id.toString(),
+          actorId,
+          actorName: req.user?.name || "",
+        },
+        push: {
+          enabled: !post.notificationsEnabled,
+          tokens: postAuthor?.expoPushTokens || [],
+          channelId: "messages",
+        },
+      });
+    }
+
     return res.status(201).json({ comment });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const togglePostNotifications = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      throw createHttpError(404, "Post not found");
+    }
+
+    if (post.author.toString() !== req.user._id.toString()) {
+      throw createHttpError(403, "You can update only your own posts");
+    }
+
+    post.notificationsEnabled = !post.notificationsEnabled;
+    await post.save();
+
+    return res.status(200).json({
+      notificationsEnabled: post.notificationsEnabled,
+    });
   } catch (error) {
     return next(error);
   }
@@ -276,6 +356,7 @@ module.exports = {
   updatePost,
   toggleLike,
   addComment,
+  togglePostNotifications,
   deletePost,
   seedPosts,
 };

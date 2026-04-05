@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { registerUser } from "../../services/api";
+import { getHomeRouteForUser, registerUser } from "../../services/api";
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
@@ -22,8 +22,12 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
+  const navigatedRef = useRef(false);
 
   const handleRegister = async () => {
+    if (loading || submittingRef.current || navigatedRef.current) return;
+
     if (!fullName || !email || !password || !confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
       return;
@@ -37,18 +41,24 @@ export default function RegisterScreen() {
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
-    const { error } = await registerUser(fullName, email, password);
-    setLoading(false);
 
-    if (error) {
-      Alert.alert("Registration Failed", error);
-      return;
+    try {
+      const { data, error } = await registerUser(fullName, email, password);
+
+      if (error) {
+        Alert.alert("Registration Failed", error);
+        return;
+      }
+
+      if (navigatedRef.current) return;
+      navigatedRef.current = true;
+      router.replace(getHomeRouteForUser(data?.user) as any);
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
     }
-
-    Alert.alert("Success", "Account created successfully!", [
-      { text: "Continue", onPress: () => router.replace("/(dashboard)") },
-    ]);
   };
 
   return (

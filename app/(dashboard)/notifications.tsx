@@ -1,105 +1,68 @@
 import { Ionicons } from "@expo/vector-icons";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type AppNotification,
+} from "../../services/api";
 
-const NOTIFICATIONS = [
-  {
-    id: "1",
-    avatar: "https://i.pravatar.cc/150?img=40",
-    title: "New update available",
-    text: "Connect v2.1 is here with dark mode and new features.",
-    time: "Just now",
-    read: false,
-    icon: "sparkles",
-    iconColor: "#818cf8",
-    iconBg: "#312e81",
-  },
-  {
-    id: "2",
-    avatar: "https://i.pravatar.cc/150?img=41",
-    title: "Munkhjin shared a story",
-    text: "Check out their new travel photos from Khuvsgul.",
-    time: "5m ago",
-    read: false,
-    icon: "images",
-    iconColor: "#38bdf8",
-    iconBg: "#082f49",
-  },
-  {
-    id: "3",
-    avatar: "https://i.pravatar.cc/150?img=42",
-    title: "Your post is trending",
-    text: "Your sunset photo reached 500+ likes!",
-    time: "30m ago",
-    read: false,
-    icon: "trending-up",
-    iconColor: "#f59e0b",
-    iconBg: "#422006",
-  },
-  {
-    id: "4",
-    avatar: "https://i.pravatar.cc/150?img=43",
-    title: "Azaa sent you a message",
-    text: '"Hey, are you free this weekend?"',
-    time: "1h ago",
-    read: true,
-    icon: "chatbubble",
-    iconColor: "#34d399",
-    iconBg: "#064e3b",
-  },
-  {
-    id: "5",
-    avatar: "https://i.pravatar.cc/150?img=44",
-    title: "Weekly summary",
-    text: "You gained 24 new followers this week. Keep it up!",
-    time: "3h ago",
-    read: true,
-    icon: "bar-chart",
-    iconColor: "#a78bfa",
-    iconBg: "#3b0764",
-  },
-  {
-    id: "6",
-    avatar: "https://i.pravatar.cc/150?img=45",
-    title: "Tuvshin mentioned you",
-    text: 'Tagged you in a comment: "Look at this @you"',
-    time: "5h ago",
-    read: true,
-    icon: "at",
-    iconColor: "#818cf8",
-    iconBg: "#312e81",
-  },
-  {
-    id: "7",
-    avatar: "https://i.pravatar.cc/150?img=46",
-    title: "Live event starting",
-    text: "Photography Masterclass starts in 15 minutes.",
-    time: "8h ago",
-    read: true,
-    icon: "videocam",
-    iconColor: "#f87171",
-    iconBg: "#7f1d1d",
-  },
-  {
-    id: "8",
-    avatar: "https://i.pravatar.cc/150?img=47",
-    title: "New follower request",
-    text: "Sarnai Tsetseg wants to follow you.",
-    time: "1d ago",
-    read: true,
-    icon: "person-add",
-    iconColor: "#818cf8",
-    iconBg: "#312e81",
-  },
-];
+const iconByType = (type: string) => {
+  switch (type) {
+    case "post_like":
+      return { icon: "heart", iconColor: "#fb7185", iconBg: "#4c0519" };
+    case "post_comment":
+      return { icon: "chatbubble-ellipses", iconColor: "#60a5fa", iconBg: "#1e3a8a" };
+    case "reel_like":
+      return { icon: "heart", iconColor: "#fb7185", iconBg: "#4c0519" };
+    case "reel_comment":
+      return { icon: "chatbubble-ellipses", iconColor: "#60a5fa", iconBg: "#1e3a8a" };
+    default:
+      return { icon: "notifications", iconColor: "#818cf8", iconBg: "#312e81" };
+  }
+};
+
+const formatTimeAgo = (dateStr: string) => {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = Math.max(0, now - then);
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return new Date(dateStr).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
+};
 
 function NotificationCard({
   notification,
+  onPress,
 }: {
-  notification: (typeof NOTIFICATIONS)[0];
+  notification: AppNotification;
+  onPress: () => void;
 }) {
+  const iconMeta = iconByType(notification.type);
+
   return (
     <TouchableOpacity
+      onPress={onPress}
       style={{
         flexDirection: "row",
         alignItems: "flex-start",
@@ -112,26 +75,24 @@ function NotificationCard({
         borderColor: notification.read ? "#1f2937" : "#374151",
       }}
     >
-      {/* Icon */}
       <View
         style={{
           width: 44,
           height: 44,
           borderRadius: 14,
-          backgroundColor: notification.iconBg,
+          backgroundColor: iconMeta.iconBg,
           justifyContent: "center",
           alignItems: "center",
           marginRight: 14,
         }}
       >
         <Ionicons
-          name={notification.icon as any}
+          name={iconMeta.icon as keyof typeof Ionicons.glyphMap}
           size={20}
-          color={notification.iconColor}
+          color={iconMeta.iconColor}
         />
       </View>
 
-      {/* Content */}
       <View style={{ flex: 1 }}>
         <View
           style={{
@@ -172,10 +133,10 @@ function NotificationCard({
           }}
           numberOfLines={2}
         >
-          {notification.text}
+          {notification.body}
         </Text>
         <Text style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
-          {notification.time}
+          {formatTimeAgo(notification.createdAt)}
         </Text>
       </View>
     </TouchableOpacity>
@@ -184,13 +145,69 @@ function NotificationCard({
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const unreadNotifications = NOTIFICATIONS.filter((n) => !n.read);
-  const readNotifications = NOTIFICATIONS.filter((n) => n.read);
+  const loadNotifications = useCallback(async () => {
+    const result = await fetchNotifications();
+    if (result.data) {
+      setNotifications(result.data);
+    }
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications]),
+  );
+
+  const unreadNotifications = notifications.filter((item) => !item.read);
+  const readNotifications = notifications.filter((item) => item.read);
+
+  const handleMarkAllRead = async () => {
+    const result = await markAllNotificationsRead();
+    if (!result.data) return;
+    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+  };
+
+  const handleOpenNotification = async (notification: AppNotification) => {
+    if (!notification.read) {
+      await markNotificationRead(notification.id);
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === notification.id ? { ...item, read: true } : item,
+        ),
+      );
+    }
+
+    if (
+      notification.type === "post_like" ||
+      notification.type === "post_comment" ||
+      notification.type === "reel_like" ||
+      notification.type === "reel_comment"
+    ) {
+      router.push("/(dashboard)/profile");
+    }
+  };
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#000000",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color="#4f46e5" />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>
-      {/* Header */}
       <View
         style={{
           paddingTop: insets.top + 12,
@@ -223,19 +240,29 @@ export default function NotificationsScreen() {
       <FlatList
         data={[
           ...(unreadNotifications.length > 0
-            ? [{ id: "h-new", type: "header", title: "New" } as any]
+            ? [{ id: "h-new", type: "header", title: "New" } as const]
             : []),
           ...unreadNotifications,
           ...(readNotifications.length > 0
-            ? [{ id: "h-earlier", type: "header", title: "Earlier" } as any]
+            ? [{ id: "h-earlier", type: "header", title: "Earlier" } as const]
             : []),
           ...readNotifications,
         ]}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20, paddingTop: 4 }}
+        ListEmptyComponent={
+          <View style={{ alignItems: "center", paddingTop: 70 }}>
+            <Ionicons name="notifications-outline" size={42} color="#6b7280" />
+            <Text
+              style={{ color: "#9ca3af", marginTop: 10, fontSize: 14, fontWeight: "600" }}
+            >
+              No notifications yet
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => {
-          if (item.type === "header") {
+          if ("type" in item && item.type === "header") {
             return (
               <View
                 style={{
@@ -256,8 +283,8 @@ export default function NotificationsScreen() {
                 >
                   {item.title}
                 </Text>
-                {item.title === "New" && (
-                  <TouchableOpacity>
+                {item.title === "New" && unreadNotifications.length > 0 && (
+                  <TouchableOpacity onPress={handleMarkAllRead}>
                     <Text
                       style={{
                         fontSize: 13,
@@ -272,7 +299,13 @@ export default function NotificationsScreen() {
               </View>
             );
           }
-          return <NotificationCard notification={item} />;
+
+          return (
+            <NotificationCard
+              notification={item as AppNotification}
+              onPress={() => handleOpenNotification(item as AppNotification)}
+            />
+          );
         }}
       />
     </View>

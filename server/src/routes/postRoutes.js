@@ -7,6 +7,7 @@ const {
   getPost,
   listPosts,
   toggleLike,
+  togglePostNotifications,
   updatePost,
   seedPosts,
 } = require("../controllers/postController");
@@ -117,6 +118,13 @@ router.post(
   requireAuth,
   [param("postId").isMongoId().withMessage("Invalid post id"), validateRequest],
   toggleLike,
+);
+
+router.post(
+  "/:postId/notifications/toggle",
+  requireAuth,
+  [param("postId").isMongoId().withMessage("Invalid post id"), validateRequest],
+  togglePostNotifications,
 );
 
 router.post(

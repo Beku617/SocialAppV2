@@ -48,6 +48,10 @@ const userSchema = new mongoose.Schema(
     },
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    expoPushTokens: {
+      type: [String],
+      default: [],
+    },
     bannedAt: {
       type: Date,
       default: null,
@@ -70,6 +74,7 @@ userSchema.set("toJSON", {
     delete ret._id;
     delete ret.__v;
     delete ret.passwordHash;
+    delete ret.expoPushTokens;
     return ret;
   },
 });

@@ -23,6 +23,7 @@ export {
   deleteAccount,
   getMe,
   loginUser,
+  registerPushToken,
   registerUser,
   updateProfile,
   type UserProfile,
@@ -62,10 +63,24 @@ export {
   deletePost,
   fetchPostDetails,
   fetchPosts,
+  getHiddenPostIds,
+  getSavedPostIds,
+  hidePost,
+  isPostSaved,
   seedPosts,
+  togglePostNotifications,
+  toggleSavedPost,
   toggleLike,
   updatePost,
 } from "./posts";
+
+// Notifications
+export {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type AppNotification,
+} from "./notifications";
 
 // Stories
 export {
