@@ -1,7 +1,8 @@
 import { BASE_URL, getValidToken, type ApiResponse } from "./config";
 import * as FileSystem from "expo-file-system/legacy";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type ReelVisibility = "public" | "followers" | "private";
+export type ReelVisibility = "public" | "friends" | "private";
 export type ReelStatus = "uploading" | "processing" | "ready" | "failed";
 export type ReelTab = "reels" | "friends";
 
@@ -74,6 +75,8 @@ export interface ReelLocalUploadPayload {
   fileName?: string;
 }
 
+const HIDDEN_REEL_IDS_KEY = "hidden_reel_ids";
+
 const getAuthHeaders = async (withJson = false) => {
   const token = await getValidToken();
   if (!token) {
@@ -88,6 +91,16 @@ const getAuthHeaders = async (withJson = false) => {
   };
 };
 
+const normalizeReelVisibility = (visibility: string): ReelVisibility => {
+  if (visibility === "friends" || visibility === "private") return visibility;
+  return "public";
+};
+
+const normalizeReelItem = (item: Reel): Reel => ({
+  ...item,
+  visibility: normalizeReelVisibility(String(item.visibility || "public")),
+});
+
 export async function fetchReels(tab: ReelTab = "reels"): Promise<ApiResponse<Reel[]>> {
   try {
     const auth = await getAuthHeaders();
@@ -101,7 +114,7 @@ export async function fetchReels(tab: ReelTab = "reels"): Promise<ApiResponse<Re
     if (!response.ok) {
       return { error: json.message || "Failed to fetch reels" };
     }
-    return { data: json.reels };
+    return { data: (json.reels || []).map(normalizeReelItem) };
   } catch (err: any) {
     return { error: err.message || "Network error" };
   }
@@ -120,10 +133,49 @@ export async function fetchMyReels(): Promise<ApiResponse<Reel[]>> {
     if (!response.ok) {
       return { error: json.message || "Failed to fetch your reels" };
     }
-    return { data: json.reels };
+    return { data: (json.reels || []).map(normalizeReelItem) };
   } catch (err: any) {
     return { error: err.message || "Network error" };
   }
+}
+
+export async function fetchSavedReels(): Promise<ApiResponse<Reel[]>> {
+  try {
+    const auth = await getAuthHeaders();
+    if ("error" in auth) return { error: auth.error };
+
+    const response = await fetch(`${BASE_URL}/api/reels/saved`, {
+      headers: auth.headers,
+    });
+    const json = await response.json();
+
+    if (!response.ok) {
+      return { error: json.message || "Failed to fetch saved reels" };
+    }
+    return { data: (json.reels || []).map(normalizeReelItem) };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
+export async function fetchReelDetails(
+  reelId: string,
+): Promise<ApiResponse<Reel>> {
+  if (!reelId) return { error: "Invalid reel id" };
+
+  const mine = await fetchMyReels();
+  if (mine.data) {
+    const match = mine.data.find((item) => item.id === reelId);
+    if (match) return { data: match };
+  }
+
+  const feed = await fetchReels("reels");
+  if (feed.data) {
+    const match = feed.data.find((item) => item.id === reelId);
+    if (match) return { data: match };
+  }
+
+  return { error: mine.error || feed.error || "Failed to load reel" };
 }
 
 export async function seedReels(): Promise<ApiResponse<{ count: number; message: string }>> {
@@ -372,6 +424,50 @@ export async function toggleReelSave(
   } catch (err: any) {
     return { error: err.message || "Network error" };
   }
+}
+
+export async function reportReel(
+  reelId: string,
+  reason = "other",
+  description = "",
+): Promise<ApiResponse<{ message: string }>> {
+  try {
+    const auth = await getAuthHeaders(true);
+    if ("error" in auth) return { error: auth.error };
+
+    const response = await fetch(`${BASE_URL}/api/reels/${reelId}/report`, {
+      method: "POST",
+      headers: auth.headers,
+      body: JSON.stringify({ reason, description }),
+    });
+    const json = await response.json();
+
+    if (!response.ok) {
+      return { error: json.message || "Failed to report reel" };
+    }
+    return { data: json };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
+export async function getHiddenReelIds(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(HIDDEN_REEL_IDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === "string");
+  } catch {
+    return [];
+  }
+}
+
+export async function hideReel(reelId: string): Promise<void> {
+  if (!reelId) return;
+  const ids = await getHiddenReelIds();
+  if (ids.includes(reelId)) return;
+  await AsyncStorage.setItem(HIDDEN_REEL_IDS_KEY, JSON.stringify([...ids, reelId]));
 }
 
 export async function viewReel(

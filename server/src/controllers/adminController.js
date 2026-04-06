@@ -2,11 +2,13 @@ const fs = require("fs/promises");
 const path = require("path");
 const Message = require("../models/Message");
 const Post = require("../models/Post");
+const Report = require("../models/Report");
 const Reel = require("../models/Reel");
 const ReelComment = require("../models/ReelComment");
 const Story = require("../models/Story");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
+const { createUserNotification } = require("../utils/notificationCenter");
 const { normalizeImageUrls, serializePost } = require("../utils/serializePost");
 const {
   applyBanToUser,
@@ -17,7 +19,12 @@ const {
 
 const LOCAL_REEL_UPLOAD_LIMIT_BYTES = 40 * 1024 * 1024;
 const UPLOADS_ROOT = path.join(__dirname, "../../uploads");
-const ALLOWED_REEL_VISIBILITY = ["public", "followers", "private"];
+const ALLOWED_REEL_VISIBILITY = [
+  "public",
+  "friends",
+  "followers",
+  "private",
+];
 
 const serializeAdminUser = (user, postCount = 0) => ({
   id: user._id.toString(),
@@ -48,6 +55,37 @@ const serializeAdminPost = (post) => {
       : 0,
   };
 };
+
+const serializeAdminReport = (report) => ({
+  id: report._id.toString(),
+  reason: report.reason,
+  description: report.description || "",
+  status: report.status || "open",
+  createdAt: report.createdAt,
+  reporter: report.reporter
+    ? {
+        id: report.reporter._id.toString(),
+        name: report.reporter.name || "Unknown",
+        email: report.reporter.email || "",
+      }
+    : null,
+  post: report.post
+    ? {
+        id: report.post._id.toString(),
+        text: report.post.text || "",
+        imageUrl:
+          (Array.isArray(report.post.imageUrls) && report.post.imageUrls[0]) ||
+          report.post.imageUrl ||
+          "",
+        author: report.post.author
+          ? {
+              id: report.post.author._id.toString(),
+              name: report.post.author.name || "Unknown",
+            }
+          : null,
+      }
+    : null,
+});
 
 const toIdString = (value) => {
   if (!value) return "";
@@ -252,6 +290,67 @@ const listUsers = async (_req, res, next) => {
   }
 };
 
+const sendAdminNotification = async (req, res, next) => {
+  try {
+    const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
+    const body = typeof req.body.body === "string" ? req.body.body.trim() : "";
+    const allUsers = Boolean(req.body.allUsers);
+    const rawUserIds = Array.isArray(req.body.userIds)
+      ? req.body.userIds.filter((value) => typeof value === "string")
+      : [];
+    const uniqueUserIds = Array.from(new Set(rawUserIds));
+
+    if (!title || !body) {
+      throw createHttpError(400, "Notification title and body are required");
+    }
+
+    if (!allUsers && uniqueUserIds.length === 0) {
+      throw createHttpError(400, "Select at least one user");
+    }
+
+    const query = allUsers
+      ? {}
+      : {
+          _id: {
+            $in: uniqueUserIds,
+          },
+        };
+
+    const users = await User.find(query).select("_id expoPushTokens").lean();
+
+    if (!users.length) {
+      throw createHttpError(404, "No users found for this notification");
+    }
+
+    await Promise.all(
+      users.map((user) =>
+        createUserNotification({
+          userId: user._id,
+          type: "admin_broadcast",
+          title,
+          body,
+          data: {
+            type: "admin_broadcast",
+            senderId: req.user._id.toString(),
+          },
+          push: {
+            enabled: true,
+            tokens: user.expoPushTokens || [],
+            channelId: "messages",
+          },
+        }),
+      ),
+    );
+
+    return res.status(200).json({
+      message: "Notification sent successfully",
+      sentCount: users.length,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const getUserDetails = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.userId);
@@ -406,6 +505,30 @@ const listPosts = async (_req, res, next) => {
 
     return res.status(200).json({
       posts: posts.map(serializeAdminPost),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listReports = async (_req, res, next) => {
+  try {
+    const reports = await Report.find()
+      .sort({ createdAt: -1 })
+      .limit(400)
+      .populate("reporter", "name email")
+      .populate({
+        path: "post",
+        select: "text imageUrl imageUrls author",
+        populate: {
+          path: "author",
+          select: "name",
+        },
+      })
+      .lean();
+
+    return res.status(200).json({
+      reports: reports.map(serializeAdminReport),
     });
   } catch (error) {
     return next(error);
@@ -647,7 +770,9 @@ module.exports = {
   getSummary,
   getUserDetails,
   listPosts,
+  listReports,
   listReels,
   listUsers,
+  sendAdminNotification,
   unbanUser,
 };

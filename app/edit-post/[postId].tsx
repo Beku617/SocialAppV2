@@ -16,7 +16,15 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MultiImageGrid from "../../components/dashboard/MultiImageGrid";
 import FeedActionDialog from "../../components/dashboard/FeedActionDialog";
-import { fetchPostDetails, getMe, getUser, updatePost } from "../../services/api";
+import {
+  fetchPostDetails,
+  getMe,
+  getUser,
+  updatePost,
+  type PostVisibility,
+} from "../../services/api";
+
+const VISIBILITY_OPTIONS: PostVisibility[] = ["public", "friends", "private"];
 
 export default function EditPostScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +35,7 @@ export default function EditPostScreen() {
   const [saving, setSaving] = useState(false);
   const [caption, setCaption] = useState("");
   const [postImageData, setPostImageData] = useState<string[]>([]);
+  const [visibility, setVisibility] = useState<PostVisibility>("public");
   const [userName, setUserName] = useState("You");
   const [userAvatar, setUserAvatar] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -137,6 +146,7 @@ export default function EditPostScreen() {
             ? [postResult.data.imageUrl]
             : [],
       );
+      setVisibility(postResult.data.visibility || "public");
       setAuthorId(postResult.data.author.id);
       setLoading(false);
 
@@ -257,7 +267,7 @@ export default function EditPostScreen() {
     }
 
     setSaving(true);
-    const result = await updatePost(postId, caption.trim(), postImageData);
+    const result = await updatePost(postId, caption.trim(), postImageData, visibility);
     setSaving(false);
 
     if (!result.data) {
@@ -279,7 +289,7 @@ export default function EditPostScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: "#ffffff",
+          backgroundColor: "#000000",
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -290,23 +300,23 @@ export default function EditPostScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#ffffff" }}>
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
       <View
         style={{
           paddingTop: insets.top + 12,
           paddingHorizontal: 18,
           paddingBottom: 16,
           borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          borderBottomColor: "#111827",
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="close" size={26} color="#111827" />
+          <Ionicons name="close" size={26} color="#f9fafb" />
         </TouchableOpacity>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>Edit Post</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: "#f9fafb" }}>Edit Post</Text>
         <TouchableOpacity
           onPress={handleSave}
           disabled={!canSave}
@@ -349,13 +359,47 @@ export default function EditPostScreen() {
               style={{ width: 48, height: 48, borderRadius: 24 }}
             />
             <View>
-              <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>
+              <Text style={{ fontSize: 18, fontWeight: "700", color: "#f9fafb" }}>
                 {userName}
               </Text>
-              <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-                Update your post
+              <Text style={{ fontSize: 13, color: "#9ca3af", marginTop: 2 }}>
+                {visibility.charAt(0).toUpperCase() + visibility.slice(1)} post
               </Text>
             </View>
+          </View>
+
+          <Text style={{ fontSize: 14, color: "#9ca3af", marginBottom: 8 }}>
+            Visibility
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
+            {VISIBILITY_OPTIONS.map((option) => {
+              const selected = option === visibility;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  onPress={() => setVisibility(option)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: selected ? "#1d4ed8" : "#374151",
+                    backgroundColor: selected ? "#1d4ed8" : "#111827",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: selected ? "#dbeafe" : "#9ca3af",
+                      fontWeight: selected ? "700" : "500",
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <TextInput
@@ -368,12 +412,12 @@ export default function EditPostScreen() {
               minHeight: 92,
               paddingVertical: 6,
               fontSize: 18,
-              color: "#111827",
+              color: "#f9fafb",
               textAlignVertical: "top",
             }}
           />
 
-          <Text style={{ fontSize: 14, color: "#6b7280", marginTop: 16, marginBottom: 8 }}>
+          <Text style={{ fontSize: 14, color: "#9ca3af", marginTop: 16, marginBottom: 8 }}>
             Images
           </Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
@@ -413,7 +457,7 @@ export default function EditPostScreen() {
 
           <View style={{ marginTop: 8, gap: 6 }}>
             {postImageData.length > 0 ? (
-              <Text style={{ fontSize: 12, color: "#6b7280" }}>
+              <Text style={{ fontSize: 12, color: "#9ca3af" }}>
                 {postImageData.length} image{postImageData.length === 1 ? "" : "s"} attached.
               </Text>
             ) : null}
@@ -423,7 +467,7 @@ export default function EditPostScreen() {
                   style={{
                     fontSize: 15,
                     fontWeight: "700",
-                    color: "#111827",
+                    color: "#f9fafb",
                     marginBottom: 10,
                   }}
                 >

@@ -3,6 +3,17 @@ const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
 const { createUserNotification } = require("../utils/notificationCenter");
 
+const toIdString = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value._id) return value._id.toString();
+  return value.toString();
+};
+
+const hasUserId = (values, userId) =>
+  Array.isArray(values) &&
+  values.some((value) => toIdString(value) === String(userId));
+
 // GET /api/messages/conversations — list all conversations (latest message per user)
 const getConversations = async (req, res, next) => {
   try {
@@ -44,13 +55,25 @@ const getConversations = async (req, res, next) => {
     // Populate the other user's info
     const otherUserIds = messages.map((m) => m._id);
     const users = await User.find({ _id: { $in: otherUserIds } })
-      .select("name avatarUrl bio")
+      .select("name avatarUrl bio blockedUsers")
       .lean();
 
+    const blockedByCurrent = new Set(
+      Array.isArray(req.user.blockedUsers)
+        ? req.user.blockedUsers.map((value) => value.toString())
+        : [],
+    );
     const usersMap = {};
     users.forEach((u) => {
+      const targetId = u._id.toString();
+      if (blockedByCurrent.has(targetId)) {
+        return;
+      }
+      if (hasUserId(u.blockedUsers, userId.toString())) {
+        return;
+      }
       usersMap[u._id.toString()] = {
-        id: u._id.toString(),
+        id: targetId,
         name: u.name,
         avatarUrl: u.avatarUrl || "",
         bio: u.bio || "",
@@ -85,6 +108,12 @@ const getMessages = async (req, res, next) => {
     const otherUser = await User.findById(otherUserId);
     if (!otherUser) {
       throw createHttpError(404, "User not found");
+    }
+    if (
+      hasUserId(req.user.blockedUsers, otherUserId) ||
+      hasUserId(otherUser.blockedUsers, currentUserId.toString())
+    ) {
+      throw createHttpError(403, "Chat is blocked");
     }
 
     const messages = await Message.find({
@@ -139,6 +168,12 @@ const sendMessage = async (req, res, next) => {
     const otherUser = await User.findById(otherUserId);
     if (!otherUser) {
       throw createHttpError(404, "User not found");
+    }
+    if (
+      hasUserId(req.user.blockedUsers, otherUserId) ||
+      hasUserId(otherUser.blockedUsers, currentUserId.toString())
+    ) {
+      throw createHttpError(403, "Chat is blocked");
     }
 
     const message = await Message.create({

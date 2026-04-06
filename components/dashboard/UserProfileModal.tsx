@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,12 +11,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  acceptFriendRequest,
   getFollowersList,
-  getFollowingList,
   getUserProfile,
-  toggleFollow,
+  sendFriendRequest,
   type Post,
   type PublicUserProfile,
+  type Reel,
 } from "../../services/api";
 import FollowListModal from "./FollowListModal";
 import UserProfileActions from "./UserProfileActions";
@@ -36,13 +38,17 @@ export default function UserProfileModal({
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [reels, setReels] = useState<Reel[]>([]);
   const [postCount, setPostCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [isFriend, setIsFriend] = useState(false);
+  const [requestPending, setRequestPending] = useState(false);
+  const [requestIncoming, setRequestIncoming] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
-  const [followLoading, setFollowLoading] = useState(false);
+  const [friendsCount, setFriendsCount] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const [followListVisible, setFollowListVisible] = useState(false);
   const [followListTitle, setFollowListTitle] = useState("Followers");
@@ -56,34 +62,70 @@ export default function UserProfileModal({
     setLoading(true);
     setProfile(null);
     setPosts([]);
-    setIsFollowing(false);
+    setReels([]);
+    setPostCount(0);
+    setIsOwnProfile(false);
+    setIsFriend(false);
+    setRequestPending(false);
+    setRequestIncoming(false);
     setFollowersCount(0);
-    setFollowingCount(0);
+    setFriendsCount(0);
+    setActionLoading(false);
+
     (async () => {
       const res = await getUserProfile(userId);
       if (res.data) {
         setProfile(res.data.user);
-        setPosts(res.data.posts);
-        setPostCount(res.data.postCount);
-        setIsFollowing(res.data.isFollowing ?? false);
+        setPosts(res.data.posts || []);
+        setReels(res.data.reels || []);
+        setPostCount(res.data.postCount || 0);
+        setIsOwnProfile(Boolean(res.data.isOwnProfile));
+        setIsFriend(Boolean(res.data.isFriend));
+        setRequestPending(Boolean(res.data.friendRequestPending));
+        setRequestIncoming(Boolean(res.data.friendRequestIncoming));
         setFollowersCount(res.data.user.followersCount ?? 0);
-        setFollowingCount(res.data.user.followingCount ?? 0);
+        setFriendsCount(res.data.user.friendsCount ?? 0);
       }
       setLoading(false);
     })();
   }, [visible, userId]);
 
-  const handleToggleFollow = async () => {
-    if (!userId || followLoading) return;
-    setFollowLoading(true);
-    const res = await toggleFollow(userId);
-    if (res.data) {
-      setIsFollowing(res.data.isFollowing);
-      setFollowersCount((c) =>
-        res.data!.isFollowing ? c + 1 : Math.max(0, c - 1),
-      );
+  const handleAddFriend = async () => {
+    if (!userId || actionLoading || isOwnProfile || isFriend || requestPending) {
+      return;
     }
-    setFollowLoading(false);
+    setActionLoading(true);
+    const res = await sendFriendRequest(userId);
+    if (res.data) {
+      if (res.data.status === "friends") {
+        setIsFriend(true);
+        setRequestPending(false);
+        setRequestIncoming(false);
+      } else {
+        setRequestPending(true);
+      }
+      if (typeof res.data.followersCount === "number") {
+        setFollowersCount(res.data.followersCount);
+      }
+    }
+    setActionLoading(false);
+  };
+
+  const handleAcceptFriend = async () => {
+    if (!userId || actionLoading || isOwnProfile || isFriend || !requestIncoming) {
+      return;
+    }
+    setActionLoading(true);
+    const res = await acceptFriendRequest(userId);
+    if (res.data) {
+      setIsFriend(true);
+      setRequestPending(false);
+      setRequestIncoming(false);
+      if (typeof res.data.friendsCount === "number") {
+        setFriendsCount(res.data.friendsCount);
+      }
+    }
+    setActionLoading(false);
   };
 
   const openFollowersList = async () => {
@@ -97,21 +139,17 @@ export default function UserProfileModal({
     setFollowListLoading(false);
   };
 
-  const openFollowingList = async () => {
+  const openFriendsListScreen = () => {
     if (!userId) return;
-    setFollowListTitle("Following");
-    setFollowListVisible(true);
-    setFollowListLoading(true);
-    setFollowListUsers([]);
-    const res = await getFollowingList(userId);
-    if (res.data) setFollowListUsers(res.data);
-    setFollowListLoading(false);
+    router.push({
+      pathname: "/friends",
+      params: { userId, userName: profile?.name || "Friends" },
+    });
   };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: "#fff" }}>
-        {/* Header bar */}
+      <View style={{ flex: 1, backgroundColor: "#000000" }}>
         <View
           style={{
             paddingTop: insets.top + 6,
@@ -120,8 +158,8 @@ export default function UserProfileModal({
             flexDirection: "row",
             alignItems: "center",
             borderBottomWidth: 1,
-            borderBottomColor: "#f3f4f6",
-            backgroundColor: "#fff",
+            borderBottomColor: "#111827",
+            backgroundColor: "#000000",
           }}
         >
           <TouchableOpacity
@@ -130,12 +168,12 @@ export default function UserProfileModal({
               width: 38,
               height: 38,
               borderRadius: 19,
-              backgroundColor: "#f3f4f6",
+              backgroundColor: "#111827",
               justifyContent: "center",
               alignItems: "center",
             }}
           >
-            <Ionicons name="arrow-back" size={20} color="#374151" />
+            <Ionicons name="arrow-back" size={20} color="#f9fafb" />
           </TouchableOpacity>
           <Text
             style={{
@@ -143,7 +181,7 @@ export default function UserProfileModal({
               textAlign: "center",
               fontSize: 17,
               fontWeight: "700",
-              color: "#111827",
+              color: "#f9fafb",
               marginRight: 38,
             }}
           >
@@ -155,23 +193,30 @@ export default function UserProfileModal({
           <View
             style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
           >
-            <ActivityIndicator size="large" color="#4f46e5" />
+            <ActivityIndicator size="large" color="#6366f1" />
           </View>
         ) : profile ? (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={{ backgroundColor: "#000000" }}
+            showsVerticalScrollIndicator={false}
+          >
             <UserProfileHeader
               profile={profile}
               postCount={postCount}
               followersCount={followersCount}
-              followingCount={followingCount}
+              friendsCount={friendsCount}
               onFollowersPress={openFollowersList}
-              onFollowingPress={openFollowingList}
+              onFriendsPress={openFriendsListScreen}
             />
 
             <UserProfileActions
-              isFollowing={isFollowing}
-              followLoading={followLoading}
-              onToggleFollow={handleToggleFollow}
+              isOwnProfile={isOwnProfile}
+              isFriend={isFriend}
+              requestPending={requestPending}
+              requestIncoming={requestIncoming}
+              actionLoading={actionLoading}
+              onAddFriend={() => void handleAddFriend()}
+              onAcceptFriend={() => void handleAcceptFriend()}
               onMessage={() => {
                 if (profile && userId) {
                   onMessage(userId, profile.name, profile.avatarUrl || "");
@@ -179,15 +224,15 @@ export default function UserProfileModal({
               }}
             />
 
-            <UserProfilePostsGrid posts={posts} />
+            <UserProfilePostsGrid posts={posts} reels={reels} />
             <View style={{ height: 40 }} />
           </ScrollView>
         ) : (
           <View
             style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
           >
-            <Ionicons name="person-outline" size={48} color="#d1d5db" />
-            <Text style={{ fontSize: 15, color: "#9ca3af", marginTop: 8 }}>
+            <Ionicons name="person-outline" size={48} color="#374151" />
+            <Text style={{ fontSize: 15, color: "#6b7280", marginTop: 8 }}>
               User not found
             </Text>
           </View>

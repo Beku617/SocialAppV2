@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const visibilityValues = ["public", "followers", "private"];
+const visibilityValues = ["public", "friends", "followers", "private"];
 const statusValues = ["uploading", "processing", "ready", "failed"];
 
 const reelSchema = new mongoose.Schema(

@@ -289,13 +289,15 @@ export default function MultiImageGrid({
               </TouchableOpacity>
 
               {viewerShowPostChrome ? (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 18 }}
-                >
-                  <Ionicons name="pricetag-outline" size={23} color="#fff" />
-                  <Ionicons name="location-outline" size={23} color="#fff" />
-                  <Ionicons name="ellipsis-vertical" size={23} color="#fff" />
-                </View>
+                images.length > 1 ? (
+                  <View
+                    style={{ flexDirection: "row", alignItems: "center", gap: 18 }}
+                  >
+                    <Ionicons name="pricetag-outline" size={23} color="#fff" />
+                    <Ionicons name="location-outline" size={23} color="#fff" />
+                    <Ionicons name="ellipsis-vertical" size={23} color="#fff" />
+                  </View>
+                ) : null
               ) : (
                 <Text
                   style={{
@@ -319,52 +321,54 @@ export default function MultiImageGrid({
               }}
             >
               {viewerShowPostChrome ? (
-                <>
-                  <Text
-                    style={{
-                      color: "#fff",
-                      fontSize: 16,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {viewerTitle}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      marginTop: 4,
-                    }}
-                  >
+                images.length > 1 ? (
+                  <>
                     <Text
                       style={{
-                        color: "rgba(255,255,255,0.82)",
-                        fontSize: 12,
-                        fontWeight: "500",
+                        color: "#fff",
+                        fontSize: 16,
+                        fontWeight: "700",
                       }}
                     >
-                      {viewerSubtitle}
+                      {viewerTitle}
                     </Text>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={12}
-                      color="rgba(255,255,255,0.78)"
-                    />
-                  </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "rgba(255,255,255,0.82)",
+                          fontSize: 12,
+                          fontWeight: "500",
+                        }}
+                      >
+                        {viewerSubtitle}
+                      </Text>
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={12}
+                        color="rgba(255,255,255,0.78)"
+                      />
+                    </View>
 
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 18,
-                      marginTop: 14,
-                    }}
-                  >
-                    <Ionicons name="thumbs-up-outline" size={29} color="#fff" />
-                    <Ionicons name="chatbubble-outline" size={29} color="#fff" />
-                  </View>
-                </>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 18,
+                        marginTop: 14,
+                      }}
+                    >
+                      <Ionicons name="thumbs-up-outline" size={29} color="#fff" />
+                      <Ionicons name="chatbubble-outline" size={29} color="#fff" />
+                    </View>
+                  </>
+                ) : null
               ) : (
                 <Text
                   style={{

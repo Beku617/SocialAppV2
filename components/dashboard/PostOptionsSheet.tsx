@@ -12,8 +12,6 @@ type PostOptionsSheetProps = {
   onClose: () => void;
   onEditPost: () => void;
   onDeletePost: () => void;
-  onInterested: () => void;
-  onNotInterested: () => void;
   onToggleSaved: () => void;
   onHidePost: () => void;
   onReportPost: () => void;
@@ -115,8 +113,6 @@ export default function PostOptionsSheet({
   onClose,
   onEditPost,
   onDeletePost,
-  onInterested,
-  onNotInterested,
   onToggleSaved,
   onHidePost,
   onReportPost,
@@ -187,29 +183,16 @@ export default function PostOptionsSheet({
                   onPress={onDeletePost}
                 />
               </SheetCard>
-            ) : (
-              <SheetCard>
-                <OptionItem
-                  icon="add-circle-outline"
-                  title="Interested"
-                  description="More of your posts will be like this."
-                  onPress={onInterested}
-                />
-                <OptionItem
-                  icon="remove-circle-outline"
-                  title="Not interested"
-                  description="Less of your posts will be like this."
-                  onPress={onNotInterested}
-                />
-              </SheetCard>
-            )}
+            ) : null}
 
             <SheetCard>
               <OptionItem
                 icon={saved ? "bookmark" : "bookmark-outline"}
-                title={saved ? "Saved" : "Save post"}
+                title={saved ? "Unsave post" : "Save post"}
                 description={
-                  saved ? "This post is already in your saved items." : "Add this to your saved items."
+                  saved
+                    ? "Remove this post from your saved items."
+                    : "Add this to your saved items."
                 }
                 onPress={onToggleSaved}
               />
@@ -227,24 +210,26 @@ export default function PostOptionsSheet({
                   onPress={onReportPost}
                 />
               ) : null}
-              <OptionItem
-                icon={notificationsEnabled ? "notifications" : "notifications-outline"}
-                title={
-                  notificationsEnabled
-                    ? "Turn off notifications for this post"
-                    : "Turn on notifications for this post"
-                }
-                description={
-                  notificationsEnabled
-                    ? "Stop getting updates about this post."
-                    : "Get updates when people interact with this post."
-                }
-                onPress={onToggleNotifications}
-              />
+              {isOwner ? (
+                <OptionItem
+                  icon={notificationsEnabled ? "notifications" : "notifications-outline"}
+                  title={
+                    notificationsEnabled
+                      ? "Turn off notifications for this post"
+                      : "Turn on notifications for this post"
+                  }
+                  description={
+                    notificationsEnabled
+                      ? "Stop getting updates about this post."
+                      : "Get updates when people interact with this post."
+                  }
+                  onPress={onToggleNotifications}
+                />
+              ) : null}
               <OptionItem
                 icon="copy-outline"
                 title="Copy link"
-                description="Copy this post link to share it anywhere."
+                description="Copy a share token to open this post in app search."
                 onPress={onCopyLink}
               />
             </SheetCard>

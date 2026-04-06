@@ -1,5 +1,5 @@
 const express = require("express");
-const { body } = require("express-validator");
+const { body, param } = require("express-validator");
 const {
   getMe,
   login,
@@ -10,6 +10,11 @@ const {
   deleteAccount,
   searchUsers,
   getUserProfile,
+  sendFriendRequest,
+  acceptFriendRequest,
+  unfriendUser,
+  blockUser,
+  getFriends,
   toggleFollow,
   getFollowers,
   getFollowing,
@@ -111,9 +116,34 @@ router.get("/users/:userId", requireAuth, getUserProfile);
 
 // Follow / unfollow
 router.post("/users/:userId/follow", requireAuth, toggleFollow);
+router.post(
+  "/users/:userId/friend-request",
+  requireAuth,
+  [param("userId").isMongoId().withMessage("Invalid user id"), validateRequest],
+  sendFriendRequest,
+);
+router.post(
+  "/users/:userId/friend-accept",
+  requireAuth,
+  [param("userId").isMongoId().withMessage("Invalid user id"), validateRequest],
+  acceptFriendRequest,
+);
+router.post(
+  "/users/:userId/unfriend",
+  requireAuth,
+  [param("userId").isMongoId().withMessage("Invalid user id"), validateRequest],
+  unfriendUser,
+);
+router.post(
+  "/users/:userId/block",
+  requireAuth,
+  [param("userId").isMongoId().withMessage("Invalid user id"), validateRequest],
+  blockUser,
+);
 
 // Followers & following lists
 router.get("/users/:userId/followers", requireAuth, getFollowers);
 router.get("/users/:userId/following", requireAuth, getFollowing);
+router.get("/users/:userId/friends", requireAuth, getFriends);
 
 module.exports = router;

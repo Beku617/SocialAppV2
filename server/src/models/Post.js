@@ -41,6 +41,17 @@ const postSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    visibility: {
+      type: String,
+      enum: ["public", "friends", "private"],
+      default: "public",
+      index: true,
+    },
+    sharedPost: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Post",
+      default: null,
+    },
     likes: [
       {
         type: mongoose.Schema.Types.ObjectId,

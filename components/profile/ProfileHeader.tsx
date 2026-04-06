@@ -22,14 +22,36 @@ export default function ProfileHeader({
         borderBottomColor: "#111827",
         backgroundColor: "#000000",
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
       }}
     >
-      <Text style={{ fontSize: 22, fontWeight: "800", color: "#f9fafb" }}>
-        {title}
-      </Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
+      <View style={{ width: 38, height: 38 }} />
+
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 4,
+        }}
+      >
+        <Text style={{ fontSize: 22, fontWeight: "800", color: "#f9fafb" }}>
+          {title}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color="#f9fafb" />
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: "#ff3040",
+            marginTop: 2,
+          }}
+        />
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 8, width: 38, justifyContent: "flex-end" }}>
         <TouchableOpacity
           onPress={onOpenSettings}
           style={{

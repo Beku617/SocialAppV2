@@ -8,30 +8,18 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AdminPostsSection from "../../components/admin/AdminPostsSection";
+import AdminReportsSection from "../../components/admin/AdminReportsSection";
 import AdminReelsSection from "../../components/admin/AdminReelsSection";
 import AdminUsersSection from "../../components/admin/AdminUsersSection";
+import AdminNotificationsSection from "../../components/admin/AdminNotificationsSection";
 import {
   clearAuth,
   fetchAdminSummary,
   type AdminSummary,
 } from "../../services/api";
 import { router } from "expo-router";
-import { timeAgo } from "../../components/dashboard/helpers";
 
-type AdminTab = "users" | "posts" | "reels";
-
-const summaryCards: {
-  key: keyof Pick<
-    AdminSummary,
-    "totalUsers" | "totalPosts" | "totalReels" | "bannedUsers"
-  >;
-  label: string;
-}[] = [
-  { key: "totalUsers", label: "Total users" },
-  { key: "totalPosts", label: "Total posts" },
-  { key: "totalReels", label: "Total reels" },
-  { key: "bannedUsers", label: "Banned users" },
-];
+type AdminTab = "users" | "posts" | "reels" | "notifications" | "reports";
 
 export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -83,8 +71,8 @@ export default function AdminDashboardScreen() {
       <View
         style={{
           paddingTop: insets.top + 22,
-          paddingBottom: 18,
-          gap: 18,
+          paddingBottom: 14,
+          gap: 14,
         }}
       >
         <View
@@ -123,62 +111,6 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-          {summaryCards.map((card) => (
-            <View
-              key={card.key}
-              style={{
-                width: "48%",
-                backgroundColor: "#ffffff",
-                borderRadius: 22,
-                borderWidth: 1,
-                borderColor: "#e5e7eb",
-                padding: 16,
-                gap: 8,
-              }}
-            >
-              <Text style={{ fontSize: 13, color: "#6b7280" }}>{card.label}</Text>
-              <Text
-                style={{
-                  fontSize: 26,
-                  fontWeight: "700",
-                  color: "#111827",
-                }}
-              >
-                {summary?.[card.key] ?? 0}
-              </Text>
-            </View>
-          ))}
-
-          <View
-            style={{
-              width: "48%",
-              backgroundColor: "#ffffff",
-              borderRadius: 22,
-              borderWidth: 1,
-              borderColor: "#e5e7eb",
-              padding: 16,
-              gap: 8,
-            }}
-          >
-            <Text style={{ fontSize: 13, color: "#6b7280" }}>Recent activity</Text>
-            <Text
-              style={{
-                fontSize: 16,
-                fontWeight: "700",
-                color: "#111827",
-              }}
-            >
-              {summary?.recentActivity[0]?.title || "No recent activity"}
-            </Text>
-            <Text style={{ fontSize: 12, color: "#6b7280", lineHeight: 18 }}>
-              {summary?.recentActivity[0]
-                ? `${summary.recentActivity[0].subtitle} • ${timeAgo(summary.recentActivity[0].createdAt)}`
-                : "Updates from new users and posts appear here."}
-            </Text>
-          </View>
-        </View>
-
         <View
           style={{
             flexDirection: "row",
@@ -187,7 +119,7 @@ export default function AdminDashboardScreen() {
             padding: 4,
           }}
         >
-          {(["users", "posts", "reels"] as AdminTab[]).map((tab) => {
+          {(["users", "posts", "reels", "notifications", "reports"] as AdminTab[]).map((tab) => {
             const active = activeTab === tab;
 
             return (
@@ -210,7 +142,7 @@ export default function AdminDashboardScreen() {
                     textTransform: "capitalize",
                   }}
                 >
-                  {tab}
+                  {tab === "notifications" ? "notify" : tab}
                 </Text>
               </TouchableOpacity>
             );
@@ -220,9 +152,88 @@ export default function AdminDashboardScreen() {
 
       <View style={{ flex: 1 }}>
         {activeTab === "users" ? (
+          <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "#ffffff",
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: "#e5e7eb",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                gap: 4,
+              }}
+            >
+              <Text style={{ fontSize: 12, color: "#6b7280" }}>Total users</Text>
+              <Text style={{ fontSize: 23, fontWeight: "700", color: "#111827" }}>
+                {summary?.totalUsers ?? 0}
+              </Text>
+            </View>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "#ffffff",
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: "#e5e7eb",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                gap: 4,
+              }}
+            >
+              <Text style={{ fontSize: 12, color: "#6b7280" }}>Banned users</Text>
+              <Text style={{ fontSize: 23, fontWeight: "700", color: "#111827" }}>
+                {summary?.bannedUsers ?? 0}
+              </Text>
+            </View>
+          </View>
+        ) : activeTab === "posts" ? (
+          <View
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: "#e5e7eb",
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              gap: 4,
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ fontSize: 12, color: "#6b7280" }}>Total posts</Text>
+            <Text style={{ fontSize: 23, fontWeight: "700", color: "#111827" }}>
+              {summary?.totalPosts ?? 0}
+            </Text>
+          </View>
+        ) : activeTab === "reels" ? (
+          <View
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: "#e5e7eb",
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              gap: 4,
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ fontSize: 12, color: "#6b7280" }}>Total reels</Text>
+            <Text style={{ fontSize: 23, fontWeight: "700", color: "#111827" }}>
+              {summary?.totalReels ?? 0}
+            </Text>
+          </View>
+        ) : null}
+
+        {activeTab === "users" ? (
           <AdminUsersSection onDataChanged={loadSummary} />
         ) : activeTab === "posts" ? (
           <AdminPostsSection onDataChanged={loadSummary} />
+        ) : activeTab === "reports" ? (
+          <AdminReportsSection onDataChanged={loadSummary} />
+        ) : activeTab === "notifications" ? (
+          <AdminNotificationsSection onDataChanged={loadSummary} />
         ) : (
           <AdminReelsSection onDataChanged={loadSummary} />
         )}

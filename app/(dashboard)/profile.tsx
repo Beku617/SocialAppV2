@@ -10,11 +10,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  fetchSavedReels,
   fetchMyReels,
   fetchPosts,
-  getSavedPostIds,
   getFollowersList,
-  getFollowingList,
+  getSavedPostIds,
   getMe,
   updateProfile,
   type Post,
@@ -37,6 +37,7 @@ export default function ProfileScreen() {
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [myReels, setMyReels] = useState<Reel[]>([]);
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
+  const [savedReels, setSavedReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -56,10 +57,11 @@ export default function ProfileScreen() {
   const [followListLoading, setFollowListLoading] = useState(false);
 
   const loadData = async () => {
-    const [profileRes, postsRes, reelsRes] = await Promise.all([
+    const [profileRes, postsRes, reelsRes, savedReelsRes] = await Promise.all([
       getMe(),
       fetchPosts(),
       fetchMyReels(),
+      fetchSavedReels(),
     ]);
     if (profileRes.data) {
       setProfile(profileRes.data);
@@ -82,6 +84,13 @@ export default function ProfileScreen() {
     }
     if (reelsRes.data) {
       setMyReels(reelsRes.data);
+    } else {
+      setMyReels([]);
+    }
+    if (savedReelsRes.data) {
+      setSavedReels(savedReelsRes.data);
+    } else {
+      setSavedReels([]);
     }
   };
 
@@ -159,15 +168,12 @@ export default function ProfileScreen() {
     setFollowListLoading(false);
   };
 
-  const openFollowing = async () => {
+  const openFriends = () => {
     if (!profile) return;
-    setFollowListTitle("Following");
-    setFollowListUsers([]);
-    setFollowListLoading(true);
-    setFollowListVisible(true);
-    const res = await getFollowingList(profile.id);
-    if (res.data) setFollowListUsers(res.data);
-    setFollowListLoading(false);
+    router.push({
+      pathname: "/friends",
+      params: { userId: profile.id, userName: profile.name || "Friends" },
+    });
   };
 
   const avatarUri =
@@ -215,12 +221,17 @@ export default function ProfileScreen() {
           bio={profile?.bio}
           postsCount={myPosts.length}
           followersCount={profile?.followersCount ?? 0}
-          followingCount={profile?.followingCount ?? 0}
+          friendsCount={profile?.friendsCount ?? 0}
           onOpenEditProfile={openEditProfile}
           onOpenFollowers={openFollowers}
-          onOpenFollowing={openFollowing}
+          onOpenFriends={openFriends}
         />
-        <ProfilePostsSection posts={myPosts} reels={myReels} savedPosts={savedPosts} />
+        <ProfilePostsSection
+          posts={myPosts}
+          reels={myReels}
+          savedPosts={savedPosts}
+          savedReels={savedReels}
+        />
       </ScrollView>
 
       <EditProfileModal

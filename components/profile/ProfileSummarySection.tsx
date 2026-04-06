@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 
 type ProfileSummarySectionProps = {
@@ -7,10 +6,10 @@ type ProfileSummarySectionProps = {
   bio?: string | null;
   postsCount: number;
   followersCount: number;
-  followingCount: number;
+  friendsCount: number;
   onOpenEditProfile: () => void;
   onOpenFollowers: () => void;
-  onOpenFollowing: () => void;
+  onOpenFriends: () => void;
 };
 
 export default function ProfileSummarySection({
@@ -19,10 +18,10 @@ export default function ProfileSummarySection({
   bio,
   postsCount,
   followersCount,
-  followingCount,
+  friendsCount,
   onOpenEditProfile,
   onOpenFollowers,
-  onOpenFollowing,
+  onOpenFriends,
 }: ProfileSummarySectionProps) {
   return (
     <>
@@ -74,11 +73,11 @@ export default function ProfileSummarySection({
             </Text>
             <Text style={{ fontSize: 13, color: "#9ca3af" }}>followers</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onOpenFollowing} style={{ alignItems: "center" }}>
+          <TouchableOpacity onPress={onOpenFriends} style={{ alignItems: "center" }}>
             <Text style={{ fontSize: 18, fontWeight: "800", color: "#f9fafb" }}>
-              {followingCount}
+              {friendsCount}
             </Text>
-            <Text style={{ fontSize: 13, color: "#9ca3af" }}>following</Text>
+            <Text style={{ fontSize: 13, color: "#9ca3af" }}>friends</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -144,19 +143,6 @@ export default function ProfileSummarySection({
           <Text style={{ color: "#f9fafb", fontWeight: "600", fontSize: 14 }}>
             Share profile
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={{
-            width: 38,
-            backgroundColor: "#111827",
-            borderWidth: 1,
-            borderColor: "#1f2937",
-            borderRadius: 10,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Ionicons name="person-add-outline" size={18} color="#f9fafb" />
         </TouchableOpacity>
       </View>
     </>

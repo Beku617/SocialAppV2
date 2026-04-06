@@ -14,8 +14,10 @@ const {
   getSummary,
   getUserDetails,
   listPosts,
+  listReports,
   listReels,
   listUsers,
+  sendAdminNotification,
   unbanUser,
 } = require("../controllers/adminController");
 const { requireAuth, requireAdmin } = require("../middlewares/auth");
@@ -26,6 +28,33 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 router.get("/summary", getSummary);
+router.post(
+  "/notifications",
+  [
+    body("title")
+      .trim()
+      .isLength({ min: 1, max: 180 })
+      .withMessage("title is required (max 180 chars)"),
+    body("body")
+      .trim()
+      .isLength({ min: 1, max: 500 })
+      .withMessage("body is required (max 500 chars)"),
+    body("allUsers")
+      .optional()
+      .isBoolean()
+      .withMessage("allUsers must be boolean"),
+    body("userIds")
+      .optional()
+      .isArray({ min: 1, max: 1000 })
+      .withMessage("userIds must be a non-empty array"),
+    body("userIds.*")
+      .optional()
+      .isMongoId()
+      .withMessage("Each userId must be valid"),
+    validateRequest,
+  ],
+  sendAdminNotification,
+);
 
 router.get("/users", listUsers);
 router.get(
@@ -54,6 +83,8 @@ router.delete(
   [param("userId").isMongoId().withMessage("Invalid user id"), validateRequest],
   deleteUser,
 );
+
+router.get("/reports", listReports);
 
 router.get("/posts", listPosts);
 router.get(
@@ -141,8 +172,8 @@ router.post(
       .withMessage("music must be <= 180 chars"),
     body("visibility")
       .optional({ values: "falsy" })
-      .isIn(["public", "followers", "private"])
-      .withMessage("visibility must be public/followers/private"),
+      .isIn(["public", "friends", "followers", "private"])
+      .withMessage("visibility must be public/friends/private"),
     body("base64Data")
       .isString()
       .isLength({ min: 100 })

@@ -3,6 +3,8 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { Alert, Platform } from "react-native";
 
+let hasLoggedExpoGoPushNotice = false;
+
 // Backup-aligned notification handler behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -53,6 +55,22 @@ export async function registerForPushNotificationsAsync() {
 
     if (finalStatus !== "granted") {
       Alert.alert("Notification permission was denied");
+      return null;
+    }
+
+    const appOwnership = (Constants as any).appOwnership;
+    const runningInExpoGo =
+      Constants.executionEnvironment === "storeClient" ||
+      appOwnership === "expo";
+
+    // SDK 53: Expo Go should not be used for remote push token registration.
+    if (runningInExpoGo) {
+      if (!hasLoggedExpoGoPushNotice) {
+        console.log(
+          "[notifications] Expo Go detected. Remote push requires a development build; local notifications remain enabled.",
+        );
+        hasLoggedExpoGoPushNotice = true;
+      }
       return null;
     }
 

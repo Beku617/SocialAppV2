@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  resolvePostIdFromShareValue,
   searchUsers,
   type SearchUserResult,
 } from "../../services/api";
@@ -20,13 +21,16 @@ export default function SearchModal({
   visible,
   onClose,
   onViewProfile,
+  onOpenPost,
 }: {
   visible: boolean;
   onClose: () => void;
   onViewProfile: (userId: string) => void;
+  onOpenPost: (postId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
+  const [resolvedPostId, setResolvedPostId] = useState<string | null>(null);
   const [results, setResults] = useState<SearchUserResult[]>([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,6 +38,7 @@ export default function SearchModal({
   useEffect(() => {
     if (!visible) {
       setQuery("");
+      setResolvedPostId(null);
       setResults([]);
     }
   }, [visible]);
@@ -42,14 +47,26 @@ export default function SearchModal({
     setQuery(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    if (text.trim().length < 1) {
+    const normalized = text.trim();
+    const postId = resolvePostIdFromShareValue(normalized);
+    if (postId) {
+      setResolvedPostId(postId);
       setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setResolvedPostId(null);
+
+    if (normalized.length < 1) {
+      setResults([]);
+      setSearching(false);
       return;
     }
 
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
-      const res = await searchUsers(text.trim());
+      const res = await searchUsers(normalized);
       if (res.data) setResults(res.data);
       setSearching(false);
     }, 350);
@@ -104,7 +121,7 @@ export default function SearchModal({
                 fontSize: 15,
                 color: "#111827",
               }}
-              placeholder="Search people..."
+              placeholder="Search people or paste post token..."
               placeholderTextColor="#9ca3af"
               value={query}
               onChangeText={doSearch}
@@ -120,7 +137,49 @@ export default function SearchModal({
         </View>
 
         {/* Results */}
-        {searching && results.length === 0 ? (
+        {resolvedPostId ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
+            <TouchableOpacity
+              onPress={() => onOpenPost(resolvedPostId)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                padding: 14,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: "#e5e7eb",
+                backgroundColor: "#f8fafc",
+              }}
+              activeOpacity={0.75}
+            >
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: "#e0e7ff",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="document-text-outline" size={19} color="#4f46e5" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: "700", color: "#111827" }}>
+                  Open shared post
+                </Text>
+                <Text
+                  style={{ marginTop: 2, fontSize: 12, color: "#6b7280" }}
+                  numberOfLines={1}
+                >
+                  Post ID: {resolvedPostId}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+        ) : searching && results.length === 0 ? (
           <View style={{ paddingVertical: 32, alignItems: "center" }}>
             <ActivityIndicator size="small" color="#4f46e5" />
           </View>

@@ -9,7 +9,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import "react-native-reanimated";
 
-import { registerPushToken } from "../services/api";
+import { fetchNotifications, registerPushToken } from "../services/api";
 import { useColorScheme } from "../hooks/use-color-scheme";
 
 export const unstable_settings = {
@@ -21,6 +21,8 @@ export default function RootLayout() {
 
   const notificationListener = useRef<{ remove: () => void } | null>(null);
   const responseListener = useRef<{ remove: () => void } | null>(null);
+  const seenAdminNotificationIdsRef = useRef<Set<string>>(new Set());
+  const adminNotificationsHydratedRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -81,6 +83,11 @@ export default function RootLayout() {
               return;
             }
 
+            if (data?.type === "admin_broadcast") {
+              router.push("/(dashboard)/notifications");
+              return;
+            }
+
             console.log("Notification tapped:", response);
           });
       } catch (error) {
@@ -94,6 +101,58 @@ export default function RootLayout() {
       disposed = true;
       notificationListener.current?.remove();
       responseListener.current?.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    let disposed = false;
+
+    const syncAdminBroadcastLocalNotifications = async () => {
+      const result = await fetchNotifications();
+      if (disposed || !result.data) return;
+
+      const adminItems = result.data.filter(
+        (item) => item.type === "admin_broadcast",
+      );
+
+      if (!adminNotificationsHydratedRef.current) {
+        adminItems.forEach((item) =>
+          seenAdminNotificationIdsRef.current.add(item.id),
+        );
+        adminNotificationsHydratedRef.current = true;
+        return;
+      }
+
+      const freshItems = adminItems.filter(
+        (item) => !seenAdminNotificationIdsRef.current.has(item.id),
+      );
+      if (freshItems.length === 0) return;
+
+      const { sendLocalNotification } = await import("../notifications");
+      for (const item of freshItems) {
+        seenAdminNotificationIdsRef.current.add(item.id);
+        await sendLocalNotification({
+          title: item.title,
+          body: item.body,
+          data: {
+            ...(item.data || {}),
+            type: "admin_broadcast",
+            notificationId: item.id,
+          },
+        });
+      }
+    };
+
+    void syncAdminBroadcastLocalNotifications();
+    const interval = setInterval(() => {
+      void syncAdminBroadcastLocalNotifications();
+    }, 12000);
+
+    return () => {
+      disposed = true;
+      clearInterval(interval);
     };
   }, []);
 
@@ -112,9 +171,14 @@ export default function RootLayout() {
           options={{ headerShown: false, presentation: "modal" }}
         />
         <Stack.Screen
+          name="edit-reel/[reelId]"
+          options={{ headerShown: false, presentation: "modal" }}
+        />
+        <Stack.Screen
           name="settings-activity"
           options={{ headerShown: false }}
         />
+        <Stack.Screen name="friends" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

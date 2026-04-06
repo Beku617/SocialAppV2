@@ -5,16 +5,16 @@ export default function UserProfileHeader({
   profile,
   postCount,
   followersCount,
-  followingCount,
+  friendsCount,
   onFollowersPress,
-  onFollowingPress,
+  onFriendsPress,
 }: {
   profile: PublicUserProfile;
   postCount: number;
   followersCount: number;
-  followingCount: number;
+  friendsCount: number;
   onFollowersPress: () => void;
-  onFollowingPress: () => void;
+  onFriendsPress: () => void;
 }) {
   return (
     <>
@@ -26,6 +26,7 @@ export default function UserProfileHeader({
           paddingHorizontal: 20,
           paddingTop: 20,
           paddingBottom: 12,
+          backgroundColor: "#000000",
         }}
       >
         {/* Avatar */}
@@ -79,7 +80,7 @@ export default function UserProfileHeader({
               style={{
                 fontSize: 18,
                 fontWeight: "700",
-                color: "#111827",
+                color: "#f9fafb",
               }}
             >
               {postCount}
@@ -97,7 +98,7 @@ export default function UserProfileHeader({
               style={{
                 fontSize: 18,
                 fontWeight: "700",
-                color: "#111827",
+                color: "#f9fafb",
               }}
             >
               {followersCount}
@@ -106,34 +107,30 @@ export default function UserProfileHeader({
               Followers
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onFollowingPress}
-            style={{ alignItems: "center" }}
-            activeOpacity={0.6}
-          >
+          <TouchableOpacity onPress={onFriendsPress} style={{ alignItems: "center" }} activeOpacity={0.6}>
             <Text
               style={{
                 fontSize: 18,
                 fontWeight: "700",
-                color: "#111827",
+                color: "#f9fafb",
               }}
             >
-              {followingCount}
+              {friendsCount}
             </Text>
             <Text style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
-              Following
+              Friends
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Name & bio */}
-      <View style={{ paddingHorizontal: 20, paddingBottom: 14 }}>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 14, backgroundColor: "#000000" }}>
         <Text
           style={{
             fontSize: 16,
             fontWeight: "700",
-            color: "#111827",
+            color: "#f9fafb",
           }}
         >
           {profile.name}
@@ -142,7 +139,7 @@ export default function UserProfileHeader({
           <Text
             style={{
               fontSize: 14,
-              color: "#6b7280",
+              color: "#d1d5db",
               marginTop: 4,
               lineHeight: 20,
             }}

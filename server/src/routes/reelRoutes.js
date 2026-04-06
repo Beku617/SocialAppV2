@@ -5,9 +5,11 @@ const {
   deleteReel,
   initiateUpload,
   listMyReels,
+  listSavedReels,
   listReels,
   markFailed,
   markReady,
+  reportReel,
   seedReels,
   toggleLike,
   toggleSave,
@@ -34,6 +36,7 @@ router.get(
 );
 
 router.get("/mine", requireAuth, listMyReels);
+router.get("/saved", requireAuth, listSavedReels);
 
 router.post("/seed", requireAuth, seedReels);
 
@@ -53,8 +56,8 @@ router.post(
       .withMessage("music must be <= 180 chars"),
     body("visibility")
       .optional({ values: "falsy" })
-      .isIn(["public", "followers", "private"])
-      .withMessage("visibility must be public/followers/private"),
+      .isIn(["public", "friends", "followers", "private"])
+      .withMessage("visibility must be public/friends/private"),
     body("fileName")
       .optional({ values: "falsy" })
       .isString()
@@ -175,8 +178,8 @@ router.patch(
       .withMessage("music must be <= 180 chars"),
     body("visibility")
       .optional()
-      .isIn(["public", "followers", "private"])
-      .withMessage("visibility must be public/followers/private"),
+      .isIn(["public", "friends", "followers", "private"])
+      .withMessage("visibility must be public/friends/private"),
     body("thumbUrl")
       .optional()
       .isString()
@@ -212,6 +215,33 @@ router.post(
   requireAuth,
   [param("reelId").isMongoId().withMessage("Invalid reel id"), validateRequest],
   trackView,
+);
+
+router.post(
+  "/:reelId/report",
+  requireAuth,
+  [
+    param("reelId").isMongoId().withMessage("Invalid reel id"),
+    body("reason")
+      .optional({ values: "falsy" })
+      .isIn([
+        "spam",
+        "harassment",
+        "hate_speech",
+        "violence",
+        "nudity",
+        "false_information",
+        "other",
+      ])
+      .withMessage("Invalid report reason"),
+    body("description")
+      .optional({ values: "falsy" })
+      .isString()
+      .isLength({ max: 500 })
+      .withMessage("description must be <= 500 chars"),
+    validateRequest,
+  ],
+  reportReel,
 );
 
 module.exports = router;

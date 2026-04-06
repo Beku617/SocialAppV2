@@ -24,7 +24,7 @@ import {
 import { timeAgo } from "../dashboard/helpers";
 import AdminConfirmDialog, { type AdminDialogTone } from "./AdminConfirmDialog";
 
-const VISIBILITY_OPTIONS: ReelVisibility[] = ["public", "followers", "private"];
+const VISIBILITY_OPTIONS: ReelVisibility[] = ["public", "friends", "private"];
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "N/A";

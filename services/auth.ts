@@ -37,6 +37,7 @@ export interface UserProfile extends AuthUser {
   createdAt: string;
   followersCount: number;
   followingCount: number;
+  friendsCount: number;
   ban?: BanInfo;
 }
 

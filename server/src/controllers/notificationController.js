@@ -6,6 +6,9 @@ const ACTIVITY_NOTIFICATION_TYPES = [
   "post_comment",
   "reel_like",
   "reel_comment",
+  "admin_broadcast",
+  "friend_request",
+  "friend_request_accepted",
 ];
 
 const serializeNotification = (notification) => ({

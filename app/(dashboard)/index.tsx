@@ -13,13 +13,16 @@ import {
 } from "react-native";
 import {
   createStory,
+  fetchPostDetails,
   fetchPosts,
   fetchStories,
   getHiddenPostIds,
   getMe,
+  getSnoozedAuthorIds,
   getUser,
   hidePost,
   seedPosts,
+  snoozeAuthorFor30Days,
   type Post,
   type StoryGroup,
 } from "../../services/api";
@@ -70,21 +73,32 @@ export default function HomeScreen() {
 
 
   const loadData = async () => {
+    const [hiddenPostIds, snoozedAuthorIds] = await Promise.all([
+      getHiddenPostIds(),
+      getSnoozedAuthorIds(),
+    ]);
+    const hiddenPostIdSet = new Set(hiddenPostIds);
+    const snoozedAuthorIdSet = new Set(snoozedAuthorIds);
+    const filterVisiblePosts = (items: Post[]) =>
+      items.filter(
+        (post) =>
+          !hiddenPostIdSet.has(post.id) &&
+          !snoozedAuthorIdSet.has(post.author.id),
+      );
+
     const [postsResult, storiesResult] = await Promise.all([
       fetchPosts(),
       fetchStories(),
     ]);
 
     if (postsResult.data && postsResult.data.length > 0) {
-      const hiddenPostIds = new Set(await getHiddenPostIds());
-      setPosts(postsResult.data.filter((post) => !hiddenPostIds.has(post.id)));
+      setPosts(filterVisiblePosts(postsResult.data));
     } else if (postsResult.data && postsResult.data.length === 0) {
       console.log("[HOME] No posts found, seeding...");
       await seedPosts();
       const retry = await fetchPosts();
       if (retry.data) {
-        const hiddenPostIds = new Set(await getHiddenPostIds());
-        setPosts(retry.data.filter((post) => !hiddenPostIds.has(post.id)));
+        setPosts(filterVisiblePosts(retry.data));
       }
     }
 
@@ -152,6 +166,79 @@ export default function HomeScreen() {
   const handleHidePost = useCallback(async (postId: string) => {
     await hidePost(postId);
     setPosts((prev) => prev.filter((post) => post.id !== postId));
+  }, []);
+
+  const handleSnoozeAuthor = useCallback(async (authorId: string) => {
+    await snoozeAuthorFor30Days(authorId);
+    setPosts((prev) => prev.filter((post) => post.author.id !== authorId));
+  }, []);
+
+  const handleOpenAuthorProfile = useCallback((authorId: string) => {
+    if (currentUserId && authorId === currentUserId) {
+      router.push("/(dashboard)/profile");
+      return;
+    }
+    setProfileUserId(authorId);
+  }, [currentUserId]);
+
+  const handlePostShared = useCallback((sharedPost: Post) => {
+    setPosts((prev) => [sharedPost, ...prev.filter((post) => post.id !== sharedPost.id)]);
+  }, []);
+
+  const handleOpenSharedPost = useCallback(async (postId: string) => {
+    setSearchVisible(false);
+
+    let foundExisting = false;
+    setPosts((prev) => {
+      const index = prev.findIndex((post) => post.id === postId);
+      if (index === -1) {
+        return prev;
+      }
+
+      foundExisting = true;
+      if (index === 0) {
+        return prev;
+      }
+
+      const reordered = [...prev];
+      const [targetPost] = reordered.splice(index, 1);
+      return [targetPost, ...reordered];
+    });
+
+    if (foundExisting) {
+      return;
+    }
+
+    const result = await fetchPostDetails(postId);
+    if (result.data) {
+      const snoozedAuthorIds = new Set(await getSnoozedAuthorIds());
+      if (snoozedAuthorIds.has(result.data.author.id)) {
+        setDialogState({
+          visible: true,
+          title: "Post hidden",
+          message:
+            "This post owner is snoozed for 30 days, so this post is hidden from your feed.",
+          primaryLabel: "OK",
+          tone: "warning",
+        });
+        return;
+      }
+
+      setPosts((prev) =>
+        prev.some((post) => post.id === postId)
+          ? prev
+          : [result.data as Post, ...prev],
+      );
+      return;
+    }
+
+    setDialogState({
+      visible: true,
+      title: "Post not found",
+      message: result.error || "No post matched that shared token.",
+      primaryLabel: "OK",
+      tone: "warning",
+    });
   }, []);
 
   const closeDialog = useCallback(() => {
@@ -223,6 +310,9 @@ export default function HomeScreen() {
         onLikeToggled={handleLikeToggled}
         onRemovePost={handleRemovePost}
         onHidePost={handleHidePost}
+        onOpenAuthorProfile={handleOpenAuthorProfile}
+        onPostShared={handlePostShared}
+        onSnoozeAuthor={handleSnoozeAuthor}
         onHideAuthor={handleHideAuthor}
       />
     ),
@@ -231,7 +321,10 @@ export default function HomeScreen() {
       handleHideAuthor,
       handleHidePost,
       handleLikeToggled,
+      handleOpenAuthorProfile,
+      handlePostShared,
       handleRemovePost,
+      handleSnoozeAuthor,
     ],
   );
 
@@ -357,6 +450,7 @@ export default function HomeScreen() {
           setSearchVisible(false);
           setProfileUserId(userId);
         }}
+        onOpenPost={(postId) => void handleOpenSharedPost(postId)}
       />
 
       {/* User Profile Modal */}

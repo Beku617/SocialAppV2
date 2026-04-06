@@ -1,21 +1,93 @@
 const mongoose = require("mongoose");
 const Post = require("../models/Post");
+const Report = require("../models/Report");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
 const { normalizeImageUrls, serializePost } = require("../utils/serializePost");
 const { createUserNotification } = require("../utils/notificationCenter");
 const bcrypt = require("bcryptjs");
 
-const listPosts = async (_req, res, next) => {
+const ALLOWED_POST_VISIBILITY = ["public", "friends", "private"];
+
+const toIdString = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value._id) return value._id.toString();
+  return value.toString();
+};
+
+const normalizePostVisibility = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return "public";
+  }
+
+  const normalized = String(value).toLowerCase().trim();
+  if (!ALLOWED_POST_VISIBILITY.includes(normalized)) {
+    throw createHttpError(400, "Invalid post visibility");
+  }
+
+  return normalized;
+};
+
+const buildFriendIdSet = (user) =>
+  new Set(Array.isArray(user?.friends) ? user.friends.map(toIdString) : []);
+
+const buildBlockedIdSet = (user) =>
+  new Set(
+    Array.isArray(user?.blockedUsers) ? user.blockedUsers.map(toIdString) : [],
+  );
+
+const isBlockedAuthor = (post, blockedIdSet) =>
+  blockedIdSet.has(toIdString(post?.author));
+
+const canViewerSeePost = (post, viewerId, friendIdSet) => {
+  const authorId = toIdString(post?.author);
+  const visibility =
+    typeof post?.visibility === "string" ? post.visibility : "public";
+
+  if (!authorId) return true;
+  if (authorId === viewerId) return true;
+  if (visibility === "public") return true;
+  if (visibility === "friends") return friendIdSet.has(authorId);
+  return false;
+};
+
+const listPosts = async (req, res, next) => {
   try {
+    const viewerId = req.user._id.toString();
+    const friendIdSet = buildFriendIdSet(req.user);
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const posts = await Post.find()
       .sort({ createdAt: -1 })
       .limit(50)
       .populate("author", "name avatarUrl")
+      .populate({
+        path: "sharedPost",
+        populate: {
+          path: "author",
+          select: "name avatarUrl",
+        },
+      })
       .populate("comments.author", "name avatarUrl")
       .lean();
 
-    return res.status(200).json({ posts: posts.map(serializePost) });
+    const visiblePosts = posts
+      .filter(
+        (post) =>
+          !isBlockedAuthor(post, blockedIdSet) &&
+          canViewerSeePost(post, viewerId, friendIdSet),
+      )
+      .map((post) => {
+        if (
+          post.sharedPost &&
+          !canViewerSeePost(post.sharedPost, viewerId, friendIdSet)
+        ) {
+          post.sharedPost = null;
+        }
+        return post;
+      });
+
+    return res.status(200).json({ posts: visiblePosts.map(serializePost) });
   } catch (error) {
     return next(error);
   }
@@ -24,13 +96,37 @@ const listPosts = async (_req, res, next) => {
 const getPost = async (req, res, next) => {
   try {
     const { postId } = req.params;
+    const viewerId = req.user._id.toString();
+    const friendIdSet = buildFriendIdSet(req.user);
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const post = await Post.findById(postId)
       .populate("author", "name avatarUrl")
+      .populate({
+        path: "sharedPost",
+        populate: {
+          path: "author",
+          select: "name avatarUrl",
+        },
+      })
       .populate("comments.author", "name avatarUrl")
       .lean();
 
     if (!post) {
       throw createHttpError(404, "Post not found");
+    }
+
+    if (!canViewerSeePost(post, viewerId, friendIdSet)) {
+      throw createHttpError(403, "You cannot view this post");
+    }
+    if (isBlockedAuthor(post, blockedIdSet)) {
+      throw createHttpError(404, "Post not found");
+    }
+
+    if (
+      post.sharedPost &&
+      !canViewerSeePost(post.sharedPost, viewerId, friendIdSet)
+    ) {
+      post.sharedPost = null;
     }
 
     return res.status(200).json({ post: serializePost(post) });
@@ -43,6 +139,7 @@ const createPost = async (req, res, next) => {
   try {
     const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
     const imageUrls = normalizeImageUrls(req.body);
+    const visibility = normalizePostVisibility(req.body.visibility);
 
     if (!text && imageUrls.length === 0) {
       throw createHttpError(400, "Post must include text or at least one image");
@@ -53,6 +150,7 @@ const createPost = async (req, res, next) => {
       text,
       imageUrl: imageUrls[0] || "",
       imageUrls,
+      visibility,
       likes: [],
       comments: [],
       notificationsEnabled: true,
@@ -60,6 +158,13 @@ const createPost = async (req, res, next) => {
 
     const createdPost = await Post.findById(post._id)
       .populate("author", "name avatarUrl")
+      .populate({
+        path: "sharedPost",
+        populate: {
+          path: "author",
+          select: "name avatarUrl",
+        },
+      })
       .populate("comments.author", "name avatarUrl")
       .lean();
 
@@ -74,6 +179,10 @@ const updatePost = async (req, res, next) => {
     const { postId } = req.params;
     const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
     const imageUrls = normalizeImageUrls(req.body);
+    const nextVisibility =
+      req.body.visibility !== undefined
+        ? normalizePostVisibility(req.body.visibility)
+        : null;
     const post = await Post.findById(postId);
 
     if (!post) {
@@ -91,10 +200,20 @@ const updatePost = async (req, res, next) => {
     post.text = text;
     post.imageUrl = imageUrls[0] || "";
     post.imageUrls = imageUrls;
+    if (nextVisibility) {
+      post.visibility = nextVisibility;
+    }
     await post.save();
 
     const updatedPost = await Post.findById(postId)
       .populate("author", "name avatarUrl")
+      .populate({
+        path: "sharedPost",
+        populate: {
+          path: "author",
+          select: "name avatarUrl",
+        },
+      })
       .populate("comments.author", "name avatarUrl")
       .lean();
 
@@ -108,10 +227,19 @@ const toggleLike = async (req, res, next) => {
   try {
     const { postId } = req.params;
     const userId = req.user._id.toString();
+    const friendIdSet = buildFriendIdSet(req.user);
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const post = await Post.findById(postId);
 
     if (!post) {
       throw createHttpError(404, "Post not found");
+    }
+
+    if (!canViewerSeePost(post, userId, friendIdSet)) {
+      throw createHttpError(403, "You cannot interact with this post");
+    }
+    if (isBlockedAuthor(post, blockedIdSet)) {
+      throw createHttpError(403, "Action not allowed");
     }
 
     const currentIndex = post.likes.findIndex((id) => id.toString() === userId);
@@ -164,10 +292,20 @@ const addComment = async (req, res, next) => {
   try {
     const { postId } = req.params;
     const text = String(req.body?.text || "").trim();
+    const userId = req.user._id.toString();
+    const friendIdSet = buildFriendIdSet(req.user);
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const post = await Post.findById(postId);
 
     if (!post) {
       throw createHttpError(404, "Post not found");
+    }
+
+    if (!canViewerSeePost(post, userId, friendIdSet)) {
+      throw createHttpError(403, "You cannot comment on this post");
+    }
+    if (isBlockedAuthor(post, blockedIdSet)) {
+      throw createHttpError(403, "Action not allowed");
     }
 
     post.comments.push({
@@ -230,6 +368,96 @@ const togglePostNotifications = async (req, res, next) => {
     return res.status(200).json({
       notificationsEnabled: post.notificationsEnabled,
     });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const reportPost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id.toString();
+    const friendIdSet = buildFriendIdSet(req.user);
+    const blockedIdSet = buildBlockedIdSet(req.user);
+    const reason = typeof req.body.reason === "string" ? req.body.reason : "";
+    const description =
+      typeof req.body.description === "string" ? req.body.description.trim() : "";
+
+    const post = await Post.findById(postId).select("_id author");
+    if (!post) {
+      throw createHttpError(404, "Post not found");
+    }
+
+    if (!canViewerSeePost(post, userId, friendIdSet)) {
+      throw createHttpError(403, "You cannot report this post");
+    }
+    if (isBlockedAuthor(post, blockedIdSet)) {
+      throw createHttpError(403, "Action not allowed");
+    }
+
+    await Report.create({
+      post: post._id,
+      reporter: req.user._id,
+      reason,
+      description,
+      status: "open",
+    });
+
+    return res.status(201).json({ message: "Report submitted" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const sharePost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id.toString();
+    const friendIdSet = buildFriendIdSet(req.user);
+    const blockedIdSet = buildBlockedIdSet(req.user);
+    const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+    const visibility = normalizePostVisibility(req.body.visibility);
+
+    const originalPost = await Post.findById(postId)
+      .populate("author", "name avatarUrl")
+      .lean();
+
+    if (!originalPost) {
+      throw createHttpError(404, "Post not found");
+    }
+
+    if (!canViewerSeePost(originalPost, userId, friendIdSet)) {
+      throw createHttpError(403, "You cannot share this post");
+    }
+    if (isBlockedAuthor(originalPost, blockedIdSet)) {
+      throw createHttpError(403, "Action not allowed");
+    }
+
+    const shared = await Post.create({
+      author: req.user._id,
+      text,
+      imageUrl: "",
+      imageUrls: [],
+      visibility,
+      sharedPost: originalPost._id,
+      likes: [],
+      comments: [],
+      notificationsEnabled: true,
+    });
+
+    const createdPost = await Post.findById(shared._id)
+      .populate("author", "name avatarUrl")
+      .populate({
+        path: "sharedPost",
+        populate: {
+          path: "author",
+          select: "name avatarUrl",
+        },
+      })
+      .populate("comments.author", "name avatarUrl")
+      .lean();
+
+    return res.status(201).json({ post: serializePost(createdPost) });
   } catch (error) {
     return next(error);
   }
@@ -356,6 +584,8 @@ module.exports = {
   updatePost,
   toggleLike,
   addComment,
+  reportPost,
+  sharePost,
   togglePostNotifications,
   deletePost,
   seedPosts,

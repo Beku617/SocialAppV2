@@ -6,6 +6,8 @@ const {
   deletePost,
   getPost,
   listPosts,
+  reportPost,
+  sharePost,
   toggleLike,
   togglePostNotifications,
   updatePost,
@@ -16,9 +18,10 @@ const { validateRequest } = require("../utils/validateRequest");
 
 const router = express.Router();
 
-router.get("/", listPosts);
+router.get("/", requireAuth, listPosts);
 router.get(
   "/:postId",
+  requireAuth,
   [param("postId").isMongoId().withMessage("Invalid post id"), validateRequest],
   getPost,
 );
@@ -47,6 +50,10 @@ router.post(
       .optional()
       .isString()
       .withMessage("Each imageUrls entry must be a string"),
+    body("visibility")
+      .optional({ values: "falsy" })
+      .isIn(["public", "friends", "private"])
+      .withMessage("visibility must be public/friends/private"),
     body().custom((_value, { req }) => {
       const text =
         typeof req.body.text === "string" ? req.body.text.trim() : "";
@@ -91,6 +98,10 @@ router.put(
       .optional()
       .isString()
       .withMessage("Each imageUrls entry must be a string"),
+    body("visibility")
+      .optional({ values: "falsy" })
+      .isIn(["public", "friends", "private"])
+      .withMessage("visibility must be public/friends/private"),
     body().custom((_value, { req }) => {
       const text =
         typeof req.body.text === "string" ? req.body.text.trim() : "";
@@ -111,6 +122,25 @@ router.put(
     validateRequest,
   ],
   updatePost,
+);
+
+router.post(
+  "/:postId/share",
+  requireAuth,
+  [
+    param("postId").isMongoId().withMessage("Invalid post id"),
+    body("text")
+      .optional()
+      .isString()
+      .isLength({ max: 2200 })
+      .withMessage("Share caption must be 2200 chars or fewer"),
+    body("visibility")
+      .optional({ values: "falsy" })
+      .isIn(["public", "friends", "private"])
+      .withMessage("visibility must be public/friends/private"),
+    validateRequest,
+  ],
+  sharePost,
 );
 
 router.post(
@@ -139,6 +169,32 @@ router.post(
     validateRequest,
   ],
   addComment,
+);
+
+router.post(
+  "/:postId/report",
+  requireAuth,
+  [
+    param("postId").isMongoId().withMessage("Invalid post id"),
+    body("reason")
+      .isIn([
+        "spam",
+        "harassment",
+        "hate_speech",
+        "violence",
+        "nudity",
+        "false_information",
+        "other",
+      ])
+      .withMessage("Invalid report reason"),
+    body("description")
+      .optional()
+      .isString()
+      .isLength({ max: 500 })
+      .withMessage("Description must be up to 500 chars"),
+    validateRequest,
+  ],
+  reportPost,
 );
 
 router.delete(

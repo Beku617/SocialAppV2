@@ -25,13 +25,19 @@ import {
   markReelFailed,
   markReelReady,
   uploadReelVideoLocal,
+  type PostVisibility,
   type ReelVisibility,
 } from "../services/api";
+import { BASE_URL } from "../services/config";
 import MultiImageGrid from "../components/dashboard/MultiImageGrid";
 
 type CreateMode = "post" | "story" | "reel";
 
-const VISIBILITY_OPTIONS: ReelVisibility[] = ["public", "followers", "private"];
+const VISIBILITY_OPTIONS: Array<"public" | "friends" | "private"> = [
+  "public",
+  "friends",
+  "private",
+];
 const POST_ACTION_CHIPS = [
   { icon: "musical-notes-outline", label: "Music" },
   { icon: "people-outline", label: "People" },
@@ -47,6 +53,34 @@ const formatDuration = (durationMs: number) => {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 };
 
+const getAvatarValue = (value?: { avatarUrl?: string; avatar?: string } | null) => {
+  if (typeof value?.avatarUrl === "string" && value.avatarUrl.trim()) {
+    return value.avatarUrl.trim();
+  }
+  if (typeof value?.avatar === "string" && value.avatar.trim()) {
+    return value.avatar.trim();
+  }
+  return "";
+};
+
+const resolveAvatarUri = (avatarValue: string, name: string) => {
+  const raw = avatarValue.trim();
+  if (!raw) {
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4f46e5&color=fff`;
+  }
+  if (
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("data:") ||
+    raw.startsWith("file:") ||
+    raw.startsWith("content:")
+  ) {
+    return raw;
+  }
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${BASE_URL}${path}`;
+};
+
 export default function CreateReelScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string | string[] }>();
@@ -56,7 +90,7 @@ export default function CreateReelScreen() {
   const [mode, setMode] = useState<CreateMode>(initialMode);
   const [caption, setCaption] = useState("");
   const [music, setMusic] = useState("");
-  const [visibility, setVisibility] = useState<ReelVisibility>("public");
+  const [visibility, setVisibility] = useState<PostVisibility>("public");
 
   const [postImageData, setPostImageData] = useState<string[]>([]);
   const [storyImageData, setStoryImageData] = useState("");
@@ -75,13 +109,13 @@ export default function CreateReelScreen() {
       const meResult = await getMe();
       if (meResult.data) {
         setUserName(meResult.data.name || "You");
-        setUserAvatar(meResult.data.avatarUrl || "");
+        setUserAvatar(getAvatarValue(meResult.data));
         return;
       }
 
       const cachedUser = await getUser();
       if (cachedUser?.name) setUserName(cachedUser.name);
-      if (cachedUser?.avatarUrl) setUserAvatar(cachedUser.avatarUrl);
+      setUserAvatar(getAvatarValue(cachedUser));
     })();
   }, []);
 
@@ -212,7 +246,7 @@ export default function CreateReelScreen() {
       return;
     }
     setPublishing(true);
-    const result = await createPost(caption.trim(), postImageData);
+    const result = await createPost(caption.trim(), postImageData, visibility);
     setPublishing(false);
 
     if (!result.data) {
@@ -330,28 +364,26 @@ export default function CreateReelScreen() {
     await publishReel();
   };
 
-  const avatarUri =
-    userAvatar ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=4f46e5&color=fff`;
+  const avatarUri = resolveAvatarUri(userAvatar, userName);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#ffffff" }}>
+    <View style={{ flex: 1, backgroundColor: "#000000" }}>
       <View
         style={{
           paddingTop: insets.top + 12,
           paddingHorizontal: 18,
           paddingBottom: 16,
           borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
+          borderBottomColor: "#111827",
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="close" size={26} color="#111827" />
+          <Ionicons name="close" size={26} color="#f9fafb" />
         </TouchableOpacity>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>Create</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: "#f9fafb" }}>Create</Text>
         <TouchableOpacity
           onPress={handlePublish}
           disabled={!canPublish}
@@ -381,30 +413,32 @@ export default function CreateReelScreen() {
           contentContainerStyle={{ padding: 18, paddingBottom: 34 }}
           showsVerticalScrollIndicator={false}
         >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <Image
+              source={{ uri: avatarUri }}
+              style={{ width: 48, height: 48, borderRadius: 24 }}
+            />
+            <View>
+              <Text style={{ fontSize: 18, fontWeight: "700", color: "#f9fafb" }}>
+                {userName}
+              </Text>
+              <Text style={{ fontSize: 13, color: "#9ca3af", marginTop: 2 }}>
+                {mode === "story"
+                  ? "Story"
+                  : `${visibility.charAt(0).toUpperCase() + visibility.slice(1)} ${mode}`}
+              </Text>
+            </View>
+          </View>
+
           {mode === "post" ? (
             <>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 12,
-                  marginBottom: 14,
-                }}
-              >
-                <Image
-                  source={{ uri: avatarUri }}
-                  style={{ width: 48, height: 48, borderRadius: 24 }}
-                />
-                <View>
-                  <Text style={{ fontSize: 18, fontWeight: "700", color: "#111827" }}>
-                    {userName}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-                    Public post
-                  </Text>
-                </View>
-              </View>
-
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -419,15 +453,15 @@ export default function CreateReelScreen() {
                       alignItems: "center",
                       gap: 8,
                       borderWidth: 1,
-                      borderColor: "#dbe1ea",
-                      backgroundColor: "#fff",
+                      borderColor: "#1f2937",
+                      backgroundColor: "#111827",
                       borderRadius: 999,
                       paddingHorizontal: 16,
                       paddingVertical: 10,
                     }}
                   >
-                    <Ionicons name={chip.icon as any} size={18} color="#111827" />
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>
+                    <Ionicons name={chip.icon as any} size={18} color="#d1d5db" />
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#f9fafb" }}>
                       {chip.label}
                     </Text>
                   </TouchableOpacity>
@@ -444,14 +478,48 @@ export default function CreateReelScreen() {
                   minHeight: 92,
                   paddingVertical: 6,
                   fontSize: 18,
-                  color: "#111827",
+                  color: "#f9fafb",
                   textAlignVertical: "top",
                 }}
               />
+
+              <Text style={{ fontSize: 14, color: "#9ca3af", marginTop: 16, marginBottom: 8 }}>
+                Visibility
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {VISIBILITY_OPTIONS.map((option) => {
+                  const selected = option === visibility;
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      onPress={() => setVisibility(option)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: selected ? "#1d4ed8" : "#374151",
+                        backgroundColor: selected ? "#1d4ed8" : "#111827",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: selected ? "#dbeafe" : "#9ca3af",
+                          fontWeight: selected ? "700" : "500",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </>
           ) : (
             <>
-              <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 6 }}>
+              <Text style={{ fontSize: 14, color: "#9ca3af", marginBottom: 6 }}>
                 Caption
               </Text>
               <TextInput
@@ -463,12 +531,13 @@ export default function CreateReelScreen() {
                 style={{
                   minHeight: 96,
                   borderWidth: 1,
-                  borderColor: "#e5e7eb",
+                  borderColor: "#1f2937",
+                  backgroundColor: "#0b1220",
                   borderRadius: 14,
                   paddingHorizontal: 14,
                   paddingVertical: 12,
                   fontSize: 15,
-                  color: "#111827",
+                  color: "#f9fafb",
                   textAlignVertical: "top",
                 }}
               />
@@ -477,7 +546,7 @@ export default function CreateReelScreen() {
 
           {mode === "post" && (
             <>
-              <Text style={{ fontSize: 14, color: "#6b7280", marginTop: 16, marginBottom: 8 }}>
+              <Text style={{ fontSize: 14, color: "#9ca3af", marginTop: 16, marginBottom: 8 }}>
                 Optional images
               </Text>
               <View style={{ flexDirection: "row", gap: 10 }}>
@@ -516,7 +585,7 @@ export default function CreateReelScreen() {
               </View>
               <View style={{ marginTop: 8, gap: 6 }}>
                 {postImageData.length > 0 ? (
-                  <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                  <Text style={{ fontSize: 12, color: "#9ca3af" }}>
                     {postImageData.length} image{postImageData.length === 1 ? "" : "s"} attached.
                   </Text>
                 ) : null}
@@ -526,7 +595,7 @@ export default function CreateReelScreen() {
                       style={{
                         fontSize: 15,
                         fontWeight: "700",
-                        color: "#111827",
+                        color: "#f9fafb",
                         marginBottom: 10,
                       }}
                     >
@@ -555,7 +624,7 @@ export default function CreateReelScreen() {
 
           {mode === "story" && (
             <>
-              <Text style={{ fontSize: 14, color: "#6b7280", marginTop: 16, marginBottom: 8 }}>
+              <Text style={{ fontSize: 14, color: "#9ca3af", marginTop: 16, marginBottom: 8 }}>
                 Story image (required)
               </Text>
               <View style={{ flexDirection: "row", gap: 10 }}>
@@ -594,7 +663,7 @@ export default function CreateReelScreen() {
               </View>
               {storyImageData ? (
                 <View style={{ marginTop: 12, gap: 8 }}>
-                  <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                  <Text style={{ fontSize: 12, color: "#9ca3af" }}>
                     Story image ready.
                   </Text>
                   <MultiImageGrid
@@ -609,7 +678,7 @@ export default function CreateReelScreen() {
 
           {mode === "reel" && (
             <>
-              <Text style={{ fontSize: 14, color: "#6b7280", marginTop: 16, marginBottom: 6 }}>
+              <Text style={{ fontSize: 14, color: "#9ca3af", marginTop: 16, marginBottom: 6 }}>
                 Music
               </Text>
               <TextInput
@@ -619,16 +688,17 @@ export default function CreateReelScreen() {
                 placeholderTextColor="#9ca3af"
                 style={{
                   borderWidth: 1,
-                  borderColor: "#e5e7eb",
+                  borderColor: "#1f2937",
+                  backgroundColor: "#0b1220",
                   borderRadius: 14,
                   paddingHorizontal: 14,
                   paddingVertical: 11,
                   fontSize: 15,
-                  color: "#111827",
+                  color: "#f9fafb",
                 }}
               />
 
-              <Text style={{ fontSize: 14, color: "#6b7280", marginTop: 16, marginBottom: 8 }}>
+              <Text style={{ fontSize: 14, color: "#9ca3af", marginTop: 16, marginBottom: 8 }}>
                 Visibility
               </Text>
               <View style={{ flexDirection: "row", gap: 8 }}>
@@ -637,20 +707,20 @@ export default function CreateReelScreen() {
                   return (
                     <TouchableOpacity
                       key={option}
-                      onPress={() => setVisibility(option)}
+                      onPress={() => setVisibility(option as ReelVisibility)}
                       style={{
                         paddingHorizontal: 12,
                         paddingVertical: 8,
                         borderRadius: 999,
                         borderWidth: 1,
-                        borderColor: selected ? "#4f46e5" : "#d1d5db",
-                        backgroundColor: selected ? "#eef2ff" : "#fff",
+                        borderColor: selected ? "#1d4ed8" : "#374151",
+                        backgroundColor: selected ? "#1d4ed8" : "#111827",
                       }}
                     >
                       <Text
                         style={{
                           fontSize: 13,
-                          color: selected ? "#4338ca" : "#6b7280",
+                          color: selected ? "#dbeafe" : "#9ca3af",
                           fontWeight: selected ? "700" : "500",
                           textTransform: "capitalize",
                         }}
@@ -666,33 +736,33 @@ export default function CreateReelScreen() {
                 style={{
                   marginTop: 18,
                   borderWidth: 1,
-                  borderColor: "#e5e7eb",
+                  borderColor: "#1f2937",
                   borderRadius: 14,
                   padding: 14,
-                  backgroundColor: "#fafafa",
+                  backgroundColor: "#0b1220",
                 }}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <Ionicons name="videocam-outline" size={22} color="#374151" />
-                  <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827", flex: 1 }}>
+                  <Ionicons name="videocam-outline" size={22} color="#9ca3af" />
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: "#f9fafb", flex: 1 }}>
                     {videoUri ? "Video selected" : "No video selected"}
                   </Text>
                 </View>
                 {videoUri ? (
                   <>
                     <Text
-                      style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}
+                      style={{ marginTop: 8, fontSize: 12, color: "#9ca3af" }}
                       numberOfLines={2}
                     >
                       {videoFileName}
                     </Text>
-                    <Text style={{ marginTop: 4, fontSize: 12, color: "#6b7280" }}>
+                    <Text style={{ marginTop: 4, fontSize: 12, color: "#9ca3af" }}>
                       Duration: {formatDuration(videoDurationMs)}
                     </Text>
                   </>
                 ) : null}
               </View>
-              <Text style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+              <Text style={{ marginTop: 8, fontSize: 12, color: "#9ca3af" }}>
                 Reel upload saves video on your backend (max ~40MB), so other users can open it.
               </Text>
 

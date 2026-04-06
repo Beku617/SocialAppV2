@@ -2,11 +2,12 @@ const path = require("path");
 const fs = require("fs/promises");
 const mongoose = require("mongoose");
 const Reel = require("../models/Reel");
+const ReelReport = require("../models/ReelReport");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
 const { createUserNotification } = require("../utils/notificationCenter");
 
-const ALLOWED_VISIBILITY = ["public", "followers", "private"];
+const ALLOWED_VISIBILITY = ["public", "friends", "followers", "private"];
 const LOCAL_REEL_UPLOAD_LIMIT_BYTES = 40 * 1024 * 1024; // 40MB
 const UPLOADS_ROOT = path.join(__dirname, "../../uploads");
 
@@ -78,6 +79,21 @@ const toIdString = (value) => {
 const arrayHasUser = (values, userId) =>
   Array.isArray(values) && values.some((value) => toIdString(value) === userId);
 
+const buildBlockedIdSet = (user) =>
+  new Set(
+    Array.isArray(user?.blockedUsers) ? user.blockedUsers.map(toIdString) : [],
+  );
+
+const canViewerSeeReel = (reel, currentUserId, friendIdSet) => {
+  const authorId = toIdString(reel.author);
+  if (!authorId) return false;
+  if (authorId === currentUserId) return true;
+  if (reel.visibility === "public") return true;
+  return reel.visibility === "friends" || reel.visibility === "followers"
+    ? friendIdSet.has(authorId)
+    : false;
+};
+
 /**
  * Rebuild a local /uploads/ URL so it always uses the *current* request host.
  * External URLs (e.g. samplelib.com) are returned unchanged.
@@ -112,6 +128,8 @@ const mapReel = (reel, currentUserId, req) => {
     : reel.viewers?.length || 0;
 
   const storageKey = reel.storageKey || "";
+  const normalizedVisibility =
+    reel.visibility === "followers" ? "friends" : reel.visibility;
 
   return {
     id: reel._id.toString(),
@@ -133,7 +151,7 @@ const mapReel = (reel, currentUserId, req) => {
     duration: reel.duration || 0,
     width: reel.width || 0,
     height: reel.height || 0,
-    visibility: reel.visibility,
+    visibility: normalizedVisibility,
     status: reel.status,
     failureReason: reel.failureReason || "",
     likesCount,
@@ -157,6 +175,7 @@ const normalizeVisibility = (value) => {
   if (!ALLOWED_VISIBILITY.includes(normalized)) {
     throw createHttpError(400, "Invalid visibility");
   }
+  if (normalized === "followers") return "friends";
   return normalized;
 };
 
@@ -188,20 +207,16 @@ const listReels = async (req, res, next) => {
   try {
     const currentUserId = req.user._id.toString();
     const tab = req.query.tab === "friends" ? "friends" : "reels";
-    const followingIds = (req.user.following || []).map((id) => id.toString());
+    const friendIds = (req.user.friends || []).map((id) => id.toString());
+    const blockedIdSet = buildBlockedIdSet(req.user);
 
     let visibilityFilter;
     if (tab === "friends") {
       visibilityFilter = {
-        $or: [
-          { author: req.user._id },
-          {
-            author: {
-              $in: followingIds.map((id) => new mongoose.Types.ObjectId(id)),
-            },
-            visibility: { $in: ["public", "followers"] },
-          },
-        ],
+        author: {
+          $in: friendIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+        visibility: { $in: ["public", "friends", "followers"] },
       };
     } else {
       visibilityFilter = {
@@ -210,9 +225,9 @@ const listReels = async (req, res, next) => {
           { visibility: "public" },
           {
             author: {
-              $in: followingIds.map((id) => new mongoose.Types.ObjectId(id)),
+              $in: friendIds.map((id) => new mongoose.Types.ObjectId(id)),
             },
-            visibility: "followers",
+            visibility: { $in: ["friends", "followers"] },
           },
         ],
       };
@@ -227,8 +242,12 @@ const listReels = async (req, res, next) => {
       .limit(80)
       .populate("author", "name avatarUrl");
 
+    const filteredReels = reels.filter(
+      (reel) => !blockedIdSet.has(toIdString(reel.author)),
+    );
+
     return res.status(200).json({
-      reels: reels.map((reel) => mapReel(reel, currentUserId, req)),
+      reels: filteredReels.map((reel) => mapReel(reel, currentUserId, req)),
     });
   } catch (error) {
     return next(error);
@@ -245,6 +264,36 @@ const listMyReels = async (req, res, next) => {
 
     return res.status(200).json({
       reels: reels.map((reel) => mapReel(reel, currentUserId, req)),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listSavedReels = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id.toString();
+    const friendIdSet = new Set(
+      (req.user.friends || []).map((id) => id.toString()),
+    );
+    const blockedIdSet = buildBlockedIdSet(req.user);
+
+    const reels = await Reel.find({
+      status: "ready",
+      saves: req.user._id,
+    })
+      .sort({ updatedAt: -1 })
+      .limit(120)
+      .populate("author", "name avatarUrl");
+
+    const visibleReels = reels.filter((reel) => {
+      const authorId = toIdString(reel.author);
+      if (blockedIdSet.has(authorId)) return false;
+      return canViewerSeeReel(reel, currentUserId, friendIdSet);
+    });
+
+    return res.status(200).json({
+      reels: visibleReels.map((reel) => mapReel(reel, currentUserId, req)),
     });
   } catch (error) {
     return next(error);
@@ -551,10 +600,14 @@ const toggleLike = async (req, res, next) => {
   try {
     const { reelId } = req.params;
     const userId = req.user._id.toString();
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const reel = await Reel.findById(reelId);
 
     if (!reel || reel.status !== "ready") {
       throw createHttpError(404, "Reel not found");
+    }
+    if (blockedIdSet.has(reel.author.toString())) {
+      throw createHttpError(403, "Action not allowed");
     }
 
     const currentIndex = reel.likes.findIndex((id) => id.toString() === userId);
@@ -611,10 +664,14 @@ const toggleSave = async (req, res, next) => {
   try {
     const { reelId } = req.params;
     const userId = req.user._id.toString();
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const reel = await Reel.findById(reelId);
 
     if (!reel || reel.status !== "ready") {
       throw createHttpError(404, "Reel not found");
+    }
+    if (blockedIdSet.has(reel.author.toString())) {
+      throw createHttpError(403, "Action not allowed");
     }
 
     const currentIndex = reel.saves.findIndex((id) => id.toString() === userId);
@@ -641,10 +698,14 @@ const trackView = async (req, res, next) => {
   try {
     const { reelId } = req.params;
     const userId = req.user._id.toString();
+    const blockedIdSet = buildBlockedIdSet(req.user);
     const reel = await Reel.findById(reelId);
 
     if (!reel || reel.status !== "ready") {
       throw createHttpError(404, "Reel not found");
+    }
+    if (blockedIdSet.has(reel.author.toString())) {
+      throw createHttpError(403, "Action not allowed");
     }
 
     const alreadyViewed = reel.viewers.some((id) => id.toString() === userId);
@@ -658,6 +719,68 @@ const trackView = async (req, res, next) => {
       viewed: true,
       viewsCount: reel.viewsCount || reel.viewers.length,
     });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const reportReel = async (req, res, next) => {
+  try {
+    const { reelId } = req.params;
+    const reason =
+      typeof req.body?.reason === "string" && req.body.reason.trim()
+        ? req.body.reason.trim()
+        : "other";
+    const description =
+      typeof req.body?.description === "string"
+        ? req.body.description.trim()
+        : "";
+
+    const allowedReasons = [
+      "spam",
+      "harassment",
+      "hate_speech",
+      "violence",
+      "nudity",
+      "false_information",
+      "other",
+    ];
+    if (!allowedReasons.includes(reason)) {
+      throw createHttpError(400, "Invalid report reason");
+    }
+
+    const reel = await Reel.findById(reelId).select("_id author status visibility");
+    if (!reel || reel.status !== "ready") {
+      throw createHttpError(404, "Reel not found");
+    }
+
+    const currentUserId = req.user._id.toString();
+    const friendIdSet = new Set(
+      (req.user.friends || []).map((id) => id.toString()),
+    );
+    const blockedIdSet = buildBlockedIdSet(req.user);
+    const authorId = toIdString(reel.author);
+
+    if (blockedIdSet.has(authorId)) {
+      throw createHttpError(403, "Action not allowed");
+    }
+    if (!canViewerSeeReel(reel, currentUserId, friendIdSet)) {
+      throw createHttpError(403, "You cannot report this reel");
+    }
+
+    try {
+      await ReelReport.create({
+        reel: reel._id,
+        reporter: req.user._id,
+        reason,
+        description,
+        status: "open",
+      });
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+    }
+
+    return res.status(201).json({ message: "Reel reported" });
   } catch (error) {
     return next(error);
   }
@@ -722,9 +845,11 @@ module.exports = {
   deleteReel,
   initiateUpload,
   listMyReels,
+  listSavedReels,
   listReels,
   markFailed,
   markReady,
+  reportReel,
   seedReels,
   toggleLike,
   toggleSave,

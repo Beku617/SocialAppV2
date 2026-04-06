@@ -18,13 +18,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserProfileModal from "../../components/dashboard/UserProfileModal";
 import {
   sendMessage as apiSendMessage,
+  sendFriendRequest,
   getConversations,
   getMe,
   getMessages,
   getUserProfile,
   registerPushToken,
   searchUsers,
-  toggleFollow,
   type ChatMessage,
   type ConversationItem,
   type SearchUserResult,
@@ -384,7 +384,7 @@ function ChatScreen({
           alignItems: "flex-end",
           paddingHorizontal: 14,
           paddingTop: 10,
-          paddingBottom: insets.bottom + 10,
+          paddingBottom: Platform.OS === "ios" ? Math.max(insets.bottom, 8) : 8,
           backgroundColor: COLORS.bg,
           borderTopWidth: 0.5,
           borderTopColor: COLORS.border,
@@ -505,12 +505,14 @@ export default function MessagesScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState<
-    "Primary" | "General" | "Requests"
-  >("Primary");
+  const [activeTab, setActiveTab] = useState<"Messages" | "Requests">(
+    "Messages",
+  );
   const [suggestedUsers, setSuggestedUsers] = useState<SearchUserResult[]>([]);
   const [dismissedUsers, setDismissedUsers] = useState<Set<string>>(new Set());
-  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [friendActionByUserId, setFriendActionByUserId] = useState<
+    Record<string, "idle" | "pending" | "friends">
+  >({});
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [profileVisible, setProfileVisible] = useState(false);
   const [chatTarget, setChatTarget] = useState<{
@@ -613,19 +615,20 @@ export default function MessagesScreen() {
     setSuggestedUsers(allUsers);
   };
 
-  const handleFollow = async (userId: string) => {
-    const res = await toggleFollow(userId);
-    if (res.data) {
-      setFollowingIds((prev) => {
-        const next = new Set(prev);
-        if (res.data!.isFollowing) {
-          next.add(userId);
-        } else {
-          next.delete(userId);
-        }
-        return next;
-      });
+  const handleAddFriend = async (userId: string) => {
+    const currentState = friendActionByUserId[userId] || "idle";
+    if (currentState !== "idle") return;
+
+    const res = await sendFriendRequest(userId);
+    if (!res.data) {
+      Alert.alert("Error", res.error || "Failed to send friend request");
+      return;
     }
+
+    setFriendActionByUserId((prev) => ({
+      ...prev,
+      [userId]: res.data?.status === "friends" ? "friends" : "pending",
+    }));
   };
 
   const handleDismissSuggestion = (userId: string) => {
@@ -786,7 +789,7 @@ export default function MessagesScreen() {
             <Ionicons name="options-outline" size={26} color={COLORS.text} />
           </TouchableOpacity>
 
-          {/* Center: username with dropdown + online dot */}
+          {/* Center: username + online dot */}
           <TouchableOpacity
             style={{
               flex: 1,
@@ -818,19 +821,15 @@ export default function MessagesScreen() {
             />
           </TouchableOpacity>
 
-          {/* Right: trending + compose icons */}
+          {/* Right: compose icon */}
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: 16,
-              width: 70,
+              width: 38,
               justifyContent: "flex-end",
             }}
           >
-            <TouchableOpacity>
-              <Ionicons name="trending-up" size={26} color={COLORS.text} />
-            </TouchableOpacity>
             <TouchableOpacity>
               <Ionicons name="create-outline" size={24} color={COLORS.text} />
             </TouchableOpacity>
@@ -1105,30 +1104,10 @@ export default function MessagesScreen() {
                   alignItems: "center",
                   paddingHorizontal: 16,
                   paddingBottom: 12,
-                  gap: 8,
+                  gap: 10,
                 }}
               >
-                {/* Filter icon */}
-                <TouchableOpacity
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: COLORS.searchBg,
-                    borderRadius: 20,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    gap: 4,
-                  }}
-                >
-                  <Ionicons
-                    name="options-outline"
-                    size={16}
-                    color={COLORS.text}
-                  />
-                  <Ionicons name="chevron-down" size={14} color={COLORS.text} />
-                </TouchableOpacity>
-
-                {(["Primary", "Requests", "General"] as const).map((tab) => (
+                {(["Messages", "Requests"] as const).map((tab) => (
                   <TouchableOpacity
                     key={tab}
                     onPress={() => setActiveTab(tab)}
@@ -1318,7 +1297,7 @@ export default function MessagesScreen() {
                   </Text>
                 </View>
 
-                {/* Right side: unread badge or camera */}
+                {/* Right side: unread badge */}
                 {hasUnread ? (
                   <View
                     style={{
@@ -1342,13 +1321,7 @@ export default function MessagesScreen() {
                     </Text>
                   </View>
                 ) : (
-                  <TouchableOpacity style={{ padding: 4 }}>
-                    <Ionicons
-                      name="camera-outline"
-                      size={22}
-                      color={COLORS.textSecondary}
-                    />
-                  </TouchableOpacity>
+                  <View style={{ width: 22 }} />
                 )}
               </TouchableOpacity>
             );
@@ -1367,7 +1340,7 @@ export default function MessagesScreen() {
             if (filtered.length === 0) return null;
             return (
               <View style={{ paddingTop: 28, paddingHorizontal: 16 }}>
-                {/* Accounts to follow section header */}
+                {/* Accounts to add friend section header */}
                 <View
                   style={{
                     flexDirection: "row",
@@ -1383,24 +1356,14 @@ export default function MessagesScreen() {
                       color: COLORS.text,
                     }}
                   >
-                    Accounts to follow
+                    Accounts to add friend
                   </Text>
-                  <TouchableOpacity>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "600",
-                        color: COLORS.accent,
-                      }}
-                    >
-                      See all
-                    </Text>
-                  </TouchableOpacity>
                 </View>
 
                 {/* Suggested user cards */}
                 {filtered.map((user) => {
-                  const isFollowing = followingIds.has(user.id);
+                  const actionState = friendActionByUserId[user.id] || "idle";
+                  const disabled = actionState !== "idle";
                   return (
                     <View
                       key={user.id}
@@ -1468,13 +1431,19 @@ export default function MessagesScreen() {
                         </Text>
                       </View>
 
-                      {/* Follow button */}
+                      {/* Add Friend button */}
                       <TouchableOpacity
-                        onPress={() => handleFollow(user.id)}
+                        disabled={disabled}
+                        onPress={() => void handleAddFriend(user.id)}
                         style={{
-                          backgroundColor: isFollowing
+                          backgroundColor: actionState === "idle"
+                            ? COLORS.accent
+                            : COLORS.searchBg,
+                          opacity: disabled ? 0.85 : 1,
+                          borderWidth: actionState === "friends" ? 1 : 0,
+                          borderColor: actionState === "friends"
                             ? COLORS.searchBg
-                            : COLORS.accent,
+                            : "transparent",
                           borderRadius: 8,
                           paddingHorizontal: 20,
                           paddingVertical: 8,
@@ -1487,7 +1456,11 @@ export default function MessagesScreen() {
                             color: COLORS.text,
                           }}
                         >
-                          {isFollowing ? "Following" : "Follow"}
+                          {actionState === "friends"
+                            ? "Friends"
+                            : actionState === "pending"
+                              ? "Requested"
+                              : "Add Friend"}
                         </Text>
                       </TouchableOpacity>
 

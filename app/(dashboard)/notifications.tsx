@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  acceptFriendRequest,
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -22,11 +23,25 @@ const iconByType = (type: string) => {
     case "post_like":
       return { icon: "heart", iconColor: "#fb7185", iconBg: "#4c0519" };
     case "post_comment":
-      return { icon: "chatbubble-ellipses", iconColor: "#60a5fa", iconBg: "#1e3a8a" };
+      return {
+        icon: "chatbubble-ellipses",
+        iconColor: "#60a5fa",
+        iconBg: "#1e3a8a",
+      };
     case "reel_like":
       return { icon: "heart", iconColor: "#fb7185", iconBg: "#4c0519" };
     case "reel_comment":
-      return { icon: "chatbubble-ellipses", iconColor: "#60a5fa", iconBg: "#1e3a8a" };
+      return {
+        icon: "chatbubble-ellipses",
+        iconColor: "#60a5fa",
+        iconBg: "#1e3a8a",
+      };
+    case "admin_broadcast":
+      return { icon: "megaphone", iconColor: "#f59e0b", iconBg: "#78350f" };
+    case "friend_request":
+      return { icon: "person-add", iconColor: "#34d399", iconBg: "#064e3b" };
+    case "friend_request_accepted":
+      return { icon: "people", iconColor: "#34d399", iconBg: "#064e3b" };
     default:
       return { icon: "notifications", iconColor: "#818cf8", iconBg: "#312e81" };
   }
@@ -51,14 +66,24 @@ const formatTimeAgo = (dateStr: string) => {
   });
 };
 
+const isFriendRequestPending = (notification: AppNotification) =>
+  notification.type === "friend_request" &&
+  typeof notification.data?.fromUserId === "string" &&
+  notification.data?.status !== "accepted";
+
 function NotificationCard({
   notification,
   onPress,
+  acceptingFriendRequest,
+  onAcceptFriendRequest,
 }: {
   notification: AppNotification;
   onPress: () => void;
+  acceptingFriendRequest?: boolean;
+  onAcceptFriendRequest?: () => void;
 }) {
   const iconMeta = iconByType(notification.type);
+  const showAcceptButton = isFriendRequestPending(notification);
 
   return (
     <TouchableOpacity
@@ -138,6 +163,26 @@ function NotificationCard({
         <Text style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
           {formatTimeAgo(notification.createdAt)}
         </Text>
+
+        {showAcceptButton ? (
+          <TouchableOpacity
+            disabled={acceptingFriendRequest}
+            onPress={onAcceptFriendRequest}
+            style={{
+              marginTop: 10,
+              alignSelf: "flex-start",
+              backgroundColor: "#1d4ed8",
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              opacity: acceptingFriendRequest ? 0.7 : 1,
+            }}
+          >
+            <Text style={{ color: "#ffffff", fontSize: 12, fontWeight: "700" }}>
+              {acceptingFriendRequest ? "Accepting..." : "Accept"}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -147,6 +192,7 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [acceptingIds, setAcceptingIds] = useState<Record<string, boolean>>({});
 
   const loadNotifications = useCallback(async () => {
     const result = await fetchNotifications();
@@ -185,10 +231,37 @@ export default function NotificationsScreen() {
       notification.type === "post_like" ||
       notification.type === "post_comment" ||
       notification.type === "reel_like" ||
-      notification.type === "reel_comment"
+      notification.type === "reel_comment" ||
+      notification.type === "friend_request_accepted"
     ) {
       router.push("/(dashboard)/profile");
     }
+  };
+
+  const handleAcceptFriendRequest = async (notification: AppNotification) => {
+    const fromUserId =
+      typeof notification.data?.fromUserId === "string"
+        ? notification.data.fromUserId
+        : "";
+    if (!fromUserId || acceptingIds[notification.id]) return;
+
+    setAcceptingIds((prev) => ({ ...prev, [notification.id]: true }));
+    const result = await acceptFriendRequest(fromUserId);
+    setAcceptingIds((prev) => ({ ...prev, [notification.id]: false }));
+    if (!result.data) return;
+
+    await markNotificationRead(notification.id);
+    setNotifications((prev) =>
+      prev.map((item) =>
+        item.id === notification.id
+          ? {
+              ...item,
+              read: true,
+              data: { ...(item.data || {}), status: "accepted" },
+            }
+          : item,
+      ),
+    );
   };
 
   if (loading) {
@@ -208,35 +281,6 @@ export default function NotificationsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000000" }}>
-      <View
-        style={{
-          paddingTop: insets.top + 12,
-          paddingHorizontal: 20,
-          paddingBottom: 20,
-          borderBottomWidth: 1,
-          borderBottomColor: "#1f2937",
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ fontSize: 28, fontWeight: "800", color: "#ffffff" }}>
-          Notifications
-        </Text>
-        <TouchableOpacity
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 12,
-            backgroundColor: "#111827",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Ionicons name="settings-outline" size={20} color="#d1d5db" />
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         data={[
           ...(unreadNotifications.length > 0
@@ -250,12 +294,17 @@ export default function NotificationsScreen() {
         ]}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20, paddingTop: 4 }}
+        contentContainerStyle={{ paddingBottom: 20, paddingTop: insets.top + 4 }}
         ListEmptyComponent={
           <View style={{ alignItems: "center", paddingTop: 70 }}>
             <Ionicons name="notifications-outline" size={42} color="#6b7280" />
             <Text
-              style={{ color: "#9ca3af", marginTop: 10, fontSize: 14, fontWeight: "600" }}
+              style={{
+                color: "#9ca3af",
+                marginTop: 10,
+                fontSize: 14,
+                fontWeight: "600",
+              }}
             >
               No notifications yet
             </Text>
@@ -304,6 +353,10 @@ export default function NotificationsScreen() {
             <NotificationCard
               notification={item as AppNotification}
               onPress={() => handleOpenNotification(item as AppNotification)}
+              acceptingFriendRequest={Boolean(acceptingIds[item.id])}
+              onAcceptFriendRequest={() =>
+                void handleAcceptFriendRequest(item as AppNotification)
+              }
             />
           );
         }}

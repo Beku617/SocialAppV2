@@ -17,7 +17,7 @@ const GRID_SIZE = (SCREEN_WIDTH - GRID_GAP * 2) / 3;
 const FIXED_ROWS = 6;
 const MIN_GRID_SLOTS = FIXED_ROWS * 3;
 const GRID_MIN_HEIGHT = FIXED_ROWS * GRID_SIZE + (FIXED_ROWS - 1) * GRID_GAP;
-type TabKey = "posts" | "reels" | "saved";
+type TabKey = "posts" | "reels" | "saved" | "savedReels";
 type GridItem =
   | { kind: "post"; id: string; post: Post }
   | { kind: "reel"; id: string; reel: Reel }
@@ -27,12 +27,14 @@ type ProfilePostsSectionProps = {
   posts: Post[];
   reels: Reel[];
   savedPosts: Post[];
+  savedReels: Reel[];
 };
 
 export default function ProfilePostsSection({
   posts,
   reels,
   savedPosts,
+  savedReels,
 }: ProfilePostsSectionProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("posts");
 
@@ -41,6 +43,12 @@ export default function ProfilePostsSection({
       const items: GridItem[] =
         activeTab === "reels"
           ? reels.map((reel) => ({ kind: "reel" as const, id: reel.id, reel }))
+          : activeTab === "savedReels"
+            ? savedReels.map((reel) => ({
+                kind: "reel" as const,
+                id: reel.id,
+                reel,
+              }))
           : (activeTab === "posts" ? posts : savedPosts).map((post) => ({
               kind: "post" as const,
               id: post.id,
@@ -57,12 +65,13 @@ export default function ProfilePostsSection({
 
       return [...items, ...placeholders];
     },
-    [activeTab, posts, reels, savedPosts],
+    [activeTab, posts, reels, savedPosts, savedReels],
   );
 
   const isPostsTab = activeTab === "posts";
   const isReelsTab = activeTab === "reels";
   const isSavedTab = activeTab === "saved";
+  const isSavedReelsTab = activeTab === "savedReels";
 
   const openGridItem = (item: GridItem) => {
     if (item.kind === "reel") {
@@ -195,7 +204,7 @@ export default function ProfilePostsSection({
         style={{
           flexDirection: "row",
           justifyContent: "center",
-          gap: 40,
+          gap: 24,
           paddingVertical: 12,
           backgroundColor: "#000000",
         }}
@@ -240,6 +249,20 @@ export default function ProfilePostsSection({
             name={isSavedTab ? "bookmark" : "bookmark-outline"}
             size={22}
             color={isSavedTab ? "#f9fafb" : "#6b7280"}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab("savedReels")}
+          style={{
+            borderBottomWidth: 2,
+            borderBottomColor: isSavedReelsTab ? "#4f46e5" : "transparent",
+            paddingBottom: 10,
+          }}
+        >
+          <Ionicons
+            name={isSavedReelsTab ? "film" : "film-outline"}
+            size={22}
+            color={isSavedReelsTab ? "#f9fafb" : "#6b7280"}
           />
         </TouchableOpacity>
       </View>

@@ -111,12 +111,26 @@ export interface Comment {
   createdAt: string;
 }
 
+export type PostVisibility = "public" | "friends" | "private";
+
+export interface SharedPostSummary {
+  id: string;
+  author: PostAuthor;
+  text: string;
+  imageUrl: string;
+  imageUrls: string[];
+  visibility: PostVisibility;
+  createdAt: string;
+}
+
 export interface Post {
   id: string;
   author: PostAuthor;
   text: string;
   imageUrl: string;
   imageUrls: string[];
+  visibility: PostVisibility;
+  sharedPost: SharedPostSummary | null;
   likes: string[];
   comments: Comment[];
   notificationsEnabled?: boolean;

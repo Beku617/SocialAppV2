@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import {
+  banAdminUser,
   createAdminPost,
   deleteAdminPost,
   fetchAdminPostDetails,
@@ -60,6 +61,8 @@ export default function AdminPostsSection({
   const [selectedPost, setSelectedPost] = useState<AdminPost | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminPost | null>(null);
+  const [banTarget, setBanTarget] = useState<AdminPost | null>(null);
+  const [ignoredPostIds, setIgnoredPostIds] = useState<Set<string>>(new Set());
   const [noticeDialog, setNoticeDialog] = useState<NoticeDialogState | null>(
     null,
   );
@@ -204,6 +207,37 @@ export default function AdminPostsSection({
     await refreshAll();
   }, [deleteTarget, refreshAll, selectedPostId, showNotice]);
 
+  const handleBanOwner = useCallback(async () => {
+    if (!banTarget) return;
+
+    setActionPostId(`ban-${banTarget.id}`);
+    const result = await banAdminUser(banTarget.author.id, "30d");
+    setActionPostId(null);
+    setBanTarget(null);
+
+    if (result.error) {
+      showNotice("warning", "Ban owner", result.error);
+      return;
+    }
+
+    showNotice(
+      "success",
+      "Owner banned",
+      `${banTarget.author.name} has been banned for 30 days.`,
+    );
+    await refreshAll();
+  }, [banTarget, refreshAll, showNotice]);
+
+  const handleIgnorePost = useCallback((postId: string) => {
+    setIgnoredPostIds((prev) => {
+      const next = new Set(prev);
+      next.add(postId);
+      return next;
+    });
+  }, []);
+
+  const visiblePosts = posts.filter((post) => !ignoredPostIds.has(post.id));
+
   if (loading) {
     return (
       <View
@@ -248,8 +282,8 @@ export default function AdminPostsSection({
               Create post
             </Text>
             <Text style={{ fontSize: 13, color: "#6b7280", lineHeight: 20 }}>
-              Create, view, and delete posts here. Editing existing posts is
-              intentionally disabled in both the UI and API.
+              Create and moderate posts here. You can delete posts, ban owners
+              for 30 days, or ignore items from the moderation feed.
             </Text>
           </View>
 
@@ -361,152 +395,208 @@ export default function AdminPostsSection({
             backgroundColor: "#ffffff",
           }}
         >
-          {posts.map((post, index) => {
-            const previewImage = post.imageUrls?.[0] || post.imageUrl;
-            const isBusy = actionPostId === post.id;
-            const postTypeLabel = getPostTypeLabel(post);
+          {visiblePosts.length === 0 ? (
+            <View
+              style={{
+                paddingHorizontal: 18,
+                paddingVertical: 24,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ fontSize: 14, color: "#6b7280" }}>
+                No posts to moderate.
+              </Text>
+            </View>
+          ) : (
+            visiblePosts.map((post, index) => {
+              const postTypeLabel = getPostTypeLabel(post);
+              const isDeleting = actionPostId === post.id;
+              const isBanning = actionPostId === `ban-${post.id}`;
 
-            return (
-              <View
-                key={post.id}
-                style={{
-                  paddingHorizontal: 18,
-                  paddingVertical: 18,
-                  borderTopWidth: index === 0 ? 0 : 1,
-                  borderTopColor: "#f3f4f6",
-                  gap: 14,
-                }}
-              >
-                <View style={{ flexDirection: "row", gap: 14 }}>
-                  <View
+              return (
+                <View
+                  key={post.id}
+                  style={{
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    borderTopColor: "#f3f4f6",
+                    paddingBottom: 16,
+                  }}
+                >
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => void handleViewPost(post.id)}
                     style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: 18,
-                      overflow: "hidden",
-                      backgroundColor: "#e5e7eb",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      paddingHorizontal: 18,
+                      paddingTop: 16,
+                      gap: 12,
                     }}
                   >
-                    {previewImage ? (
-                      <Image
-                        source={{ uri: previewImage }}
-                        style={{ width: "100%", height: "100%" }}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={{ alignItems: "center", gap: 4 }}>
-                        <Ionicons
-                          name="document-text-outline"
-                          size={22}
-                          color="#6b7280"
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <Image
+                          source={{
+                            uri:
+                              post.author.avatarUrl ||
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author.name)}&background=e5e7eb&color=111827`,
+                          }}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            backgroundColor: "#e5e7eb",
+                          }}
                         />
+                        <View>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              fontWeight: "700",
+                              color: "#111827",
+                            }}
+                          >
+                            {post.author.name}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                            {timeAgo(post.createdAt)} • {post.status}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View
+                        style={{
+                          backgroundColor: "#f3f4f6",
+                          borderRadius: 999,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                        }}
+                      >
                         <Text
                           style={{
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: "700",
-                            color: "#6b7280",
+                            color: "#374151",
                             textTransform: "uppercase",
                             letterSpacing: 0.4,
                           }}
                         >
-                          Text
+                          {postTypeLabel}
                         </Text>
                       </View>
-                    )}
-                  </View>
+                    </View>
 
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <View
+                    {post.caption ? (
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: "#111827",
+                          lineHeight: 20,
+                        }}
+                      >
+                        {post.caption}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+
+                  {post.imageUrls.length > 0 ? (
+                    <View style={{ marginTop: 8 }}>
+                      <MultiImageGrid
+                        images={post.imageUrls}
+                        height={250}
+                        borderRadius={0}
+                        singleImageResizeMode="cover"
+                        multiImageResizeMode="contain"
+                        viewerTitle={post.author.name}
+                        viewerSubtitle={timeAgo(post.createdAt).toUpperCase()}
+                        viewerShowPostChrome
+                      />
+                    </View>
+                  ) : null}
+
+                  <View
+                    style={{
+                      paddingHorizontal: 18,
+                      paddingTop: 12,
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 10,
+                    }}
+                  >
+                    <TouchableOpacity
+                      disabled={isDeleting || isBanning}
+                      onPress={() => setDeleteTarget(post)}
                       style={{
-                        alignSelf: "flex-start",
-                        backgroundColor: "#f3f4f6",
-                        borderRadius: 999,
-                        paddingHorizontal: 10,
-                        paddingVertical: 5,
+                        backgroundColor: "#fee2e2",
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 14,
+                        opacity: isDeleting || isBanning ? 0.6 : 1,
                       }}
                     >
                       <Text
                         style={{
-                          fontSize: 11,
+                          color: "#b91c1c",
+                          fontSize: 13,
                           fontWeight: "700",
-                          color: "#374151",
-                          textTransform: "uppercase",
-                          letterSpacing: 0.4,
                         }}
                       >
-                        {postTypeLabel}
+                        {isDeleting ? "Deleting..." : "Delete post"}
                       </Text>
-                    </View>
-                    <Text
-                      numberOfLines={2}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      disabled={isDeleting || isBanning}
+                      onPress={() => setBanTarget(post)}
                       style={{
-                        fontSize: 16,
-                        fontWeight: "700",
-                        color: "#111827",
+                        backgroundColor: "#fef3c7",
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 14,
+                        opacity: isDeleting || isBanning ? 0.6 : 1,
                       }}
                     >
-                      {post.caption || "Untitled post"}
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280" }}>
-                      Author: {post.author.name}
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280" }}>
-                      Created: {formatDateTime(post.createdAt)}
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280" }}>
-                      Status: {post.status}
-                    </Text>
+                      <Text
+                        style={{
+                          color: "#92400e",
+                          fontSize: 13,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {isBanning ? "Banning..." : "Ban owner"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      disabled={isDeleting || isBanning}
+                      onPress={() => handleIgnorePost(post.id)}
+                      style={{
+                        backgroundColor: "#f3f4f6",
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 14,
+                        opacity: isDeleting || isBanning ? 0.6 : 1,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#374151",
+                          fontSize: 13,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Ignore
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={() => void handleViewPost(post.id)}
-                    style={{
-                      backgroundColor: "#111827",
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: 14,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: "#ffffff",
-                        fontSize: 13,
-                        fontWeight: "700",
-                      }}
-                    >
-                      View
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    disabled={isBusy}
-                    onPress={() => setDeleteTarget(post)}
-                    style={{
-                      backgroundColor: "#fee2e2",
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: 14,
-                      opacity: isBusy ? 0.6 : 1,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: "#b91c1c",
-                        fontSize: 13,
-                        fontWeight: "700",
-                      }}
-                    >
-                      {isBusy ? "Working..." : "Delete"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
+              );
+            })
+          )}
         </View>
       </ScrollView>
 
@@ -519,6 +609,21 @@ export default function AdminPostsSection({
         secondaryLabel="Cancel"
         onPrimary={() => void handleDeletePost()}
         onSecondary={() => setDeleteTarget(null)}
+      />
+
+      <AdminConfirmDialog
+        visible={banTarget !== null}
+        tone="warning"
+        title="Ban owner"
+        message={
+          banTarget
+            ? `Ban ${banTarget.author.name} for 30 days from this post moderation view?`
+            : ""
+        }
+        primaryLabel="Ban"
+        secondaryLabel="Cancel"
+        onPrimary={() => void handleBanOwner()}
+        onSecondary={() => setBanTarget(null)}
       />
 
       <AdminConfirmDialog

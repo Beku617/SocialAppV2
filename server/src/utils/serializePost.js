@@ -43,6 +43,22 @@ const serializeComment = (comment) => ({
   createdAt: comment?.createdAt || null,
 });
 
+const serializeSharedPost = (post) => {
+  if (!post) return null;
+  const imageUrls = normalizeImageUrls(post);
+
+  return {
+    id: toId(post?.id || post?._id),
+    author: serializeAuthor(post?.author, post?.author),
+    text: typeof post?.text === "string" ? post.text : "",
+    imageUrl: imageUrls[0] || "",
+    imageUrls,
+    visibility:
+      typeof post?.visibility === "string" ? post.visibility : "public",
+    createdAt: post?.createdAt || null,
+  };
+};
+
 const serializePost = (post) => {
   const imageUrls = normalizeImageUrls(post);
 
@@ -56,6 +72,9 @@ const serializePost = (post) => {
     comments: Array.isArray(post?.comments)
       ? post.comments.map(serializeComment)
       : [],
+    visibility:
+      typeof post?.visibility === "string" ? post.visibility : "public",
+    sharedPost: serializeSharedPost(post?.sharedPost),
     notificationsEnabled:
       typeof post?.notificationsEnabled === "boolean"
         ? post.notificationsEnabled

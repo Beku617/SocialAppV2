@@ -1,8 +1,11 @@
 const bcrypt = require("bcryptjs");
+const Notification = require("../models/Notification");
+const Reel = require("../models/Reel");
 const User = require("../models/User");
 const { createHttpError } = require("../utils/httpError");
 const { generateToken } = require("../utils/generateToken");
 const { serializePost } = require("../utils/serializePost");
+const { createUserNotification } = require("../utils/notificationCenter");
 const { buildBanSnapshot, ensureUserCanAccess } = require("../utils/userAccess");
 const { isExpoPushToken } = require("../utils/pushNotifications");
 
@@ -32,6 +35,50 @@ const buildAuthUserPayload = (user) => ({
   ...user.toJSON(),
   ban: buildBanSnapshot(user),
 });
+
+const toIdString = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value._id) return value._id.toString();
+  return value.toString();
+};
+
+const hasUserId = (values, userId) =>
+  Array.isArray(values) &&
+  values.some((value) => toIdString(value) === String(userId));
+
+const addUniqueUserId = (values, userId) => {
+  const normalizedUserId = String(userId);
+  if (!hasUserId(values, normalizedUserId)) {
+    values.push(normalizedUserId);
+  }
+};
+
+const removeUserId = (values, userId) =>
+  Array.isArray(values)
+    ? values.filter((value) => toIdString(value) !== String(userId))
+    : [];
+
+const buildBlockedIdSet = (user) =>
+  new Set(
+    Array.isArray(user?.blockedUsers) ? user.blockedUsers.map(toIdString) : [],
+  );
+
+const isBlockedRelation = (leftUser, rightUserId) =>
+  hasUserId(leftUser?.blockedUsers, rightUserId);
+
+const normalizeVisibility = (value) => {
+  if (value === "followers") return "friends";
+  if (value === "friends" || value === "private") return value;
+  return "public";
+};
+
+const canViewerSeeContent = (visibility, authorId, viewerId, viewerFriendSet) => {
+  if (authorId === viewerId) return true;
+  if (visibility === "public") return true;
+  if (visibility === "friends") return viewerFriendSet.has(authorId);
+  return false;
+};
 
 const register = async (req, res, next) => {
   try {
@@ -96,6 +143,7 @@ const getMe = async (req, res) => {
   const json = buildAuthUserPayload(user);
   json.followersCount = user.followers ? user.followers.length : 0;
   json.followingCount = user.following ? user.following.length : 0;
+  json.friendsCount = user.friends ? user.friends.length : 0;
   return res.status(200).json({ user: json });
 };
 
@@ -166,17 +214,25 @@ const searchUsers = async (req, res, next) => {
       return res.status(200).json({ users: [] });
     }
 
+    const currentUserId = req.user._id.toString();
+    const blockedByCurrent = Array.isArray(req.user.blockedUsers)
+      ? req.user.blockedUsers.map((id) => id.toString())
+      : [];
+    const excludedIds = [currentUserId, ...blockedByCurrent];
     const regex = new RegExp(q.trim(), "i");
     const users = await User.find({
-      $or: [{ name: regex }, { email: regex }],
+      _id: { $nin: excludedIds },
+      blockedUsers: { $ne: req.user._id },
+      $or: [{ name: regex }, { email: regex }, { username: regex }],
     })
-      .select("name avatarUrl bio")
+      .select("name username avatarUrl bio")
       .limit(20)
       .lean();
 
     const result = users.map((u) => ({
       id: u._id.toString(),
       name: u.name,
+      username: u.username || "",
       avatarUrl: u.avatarUrl || "",
       bio: u.bio || "",
     }));
@@ -189,35 +245,164 @@ const searchUsers = async (req, res, next) => {
 
 const getUserProfile = async (req, res, next) => {
   try {
+    const viewerId = req.user._id.toString();
     const user = await User.findById(req.params.userId);
     if (!user) {
       throw createHttpError(404, "User not found");
     }
 
+    if (
+      isBlockedRelation(req.user, user._id.toString()) ||
+      isBlockedRelation(user, viewerId)
+    ) {
+      throw createHttpError(404, "User not found");
+    }
+
     const Post = require("../models/Post");
-    const posts = await Post.find({ author: user._id })
-      .sort({ createdAt: -1 })
-      .populate("author", "name avatarUrl")
-      .populate("comments.author", "name avatarUrl")
-      .lean();
+    const viewerFriendSet = new Set(
+      Array.isArray(req.user.friends) ? req.user.friends.map(toIdString) : [],
+    );
+    const isOwnProfile = viewerId === user._id.toString();
+
+    const [allPosts, allReels] = await Promise.all([
+      Post.find({ author: user._id })
+        .sort({ createdAt: -1 })
+        .populate("author", "name avatarUrl")
+        .populate({
+          path: "sharedPost",
+          populate: {
+            path: "author",
+            select: "name avatarUrl",
+          },
+        })
+        .populate("comments.author", "name avatarUrl")
+        .lean(),
+      Reel.find({
+        author: user._id,
+        ...(isOwnProfile ? {} : { status: "ready" }),
+      })
+        .sort({ createdAt: -1 })
+        .populate("author", "name avatarUrl")
+        .lean(),
+    ]);
+
+    const posts = allPosts
+      .filter((post) =>
+        canViewerSeeContent(
+          normalizeVisibility(post.visibility),
+          user._id.toString(),
+          viewerId,
+          viewerFriendSet,
+        ),
+      )
+      .map((post) => {
+        if (
+          post.sharedPost &&
+          !canViewerSeeContent(
+            normalizeVisibility(post.sharedPost.visibility),
+            toIdString(post.sharedPost.author),
+            viewerId,
+            viewerFriendSet,
+          )
+        ) {
+          post.sharedPost = null;
+        }
+        return serializePost(post);
+      });
+
+    const reels = allReels
+      .filter((reel) =>
+        canViewerSeeContent(
+          normalizeVisibility(reel.visibility),
+          toIdString(reel.author),
+          viewerId,
+          viewerFriendSet,
+        ),
+      )
+      .map((reel) => {
+        const normalizedVisibility = normalizeVisibility(reel.visibility);
+        return {
+          id: reel._id.toString(),
+          author: {
+            id: toIdString(reel.author),
+            name: reel.author?.name || "Unknown",
+            avatarUrl: reel.author?.avatarUrl || "",
+          },
+          caption: reel.caption || "",
+          music: reel.music || "",
+          storageKey: reel.storageKey || "",
+          originalUrl: reel.originalUrl || "",
+          playbackUrl: reel.playbackUrl || "",
+          thumbUrl: reel.thumbUrl || "",
+          duration: reel.duration || 0,
+          width: reel.width || 0,
+          height: reel.height || 0,
+          visibility: normalizedVisibility,
+          status: reel.status || "ready",
+          failureReason: reel.failureReason || "",
+          likesCount: Number.isFinite(reel.likesCount)
+            ? reel.likesCount
+            : Array.isArray(reel.likes)
+              ? reel.likes.length
+              : 0,
+          commentsCount: Number.isFinite(reel.commentsCount)
+            ? reel.commentsCount
+            : 0,
+          viewsCount: Number.isFinite(reel.viewsCount)
+            ? reel.viewsCount
+            : Array.isArray(reel.viewers)
+              ? reel.viewers.length
+              : 0,
+          repostsCount: Number.isFinite(reel.repostsCount)
+            ? reel.repostsCount
+            : 0,
+          sharesCount: Number.isFinite(reel.sharesCount)
+            ? reel.sharesCount
+            : 0,
+          savesCount: Number.isFinite(reel.savesCount)
+            ? reel.savesCount
+            : Array.isArray(reel.saves)
+              ? reel.saves.length
+              : 0,
+          likedByMe: hasUserId(reel.likes, viewerId),
+          savedByMe: hasUserId(reel.saves, viewerId),
+          ownedByMe: toIdString(reel.author) === viewerId,
+          createdAt: reel.createdAt,
+          updatedAt: reel.updatedAt,
+          processedAt: reel.processedAt || null,
+        };
+      });
 
     const postCount = posts.length;
     const followersCount = user.followers ? user.followers.length : 0;
     const followingCount = user.following ? user.following.length : 0;
+    const friendsCount = user.friends ? user.friends.length : 0;
     const isFollowing = user.followers
       ? user.followers.some((id) => id.toString() === req.user._id.toString())
       : false;
+    const isFriend = hasUserId(user.friends, viewerId);
+    const friendRequestPending = hasUserId(user.friendRequestsReceived, viewerId);
+    const friendRequestIncoming = hasUserId(
+      req.user.friendRequestsReceived,
+      user._id.toString(),
+    );
 
     const json = user.toJSON();
     json.followersCount = followersCount;
     json.followingCount = followingCount;
+    json.friendsCount = friendsCount;
     json.ban = buildBanSnapshot(user);
 
     return res.status(200).json({
       user: json,
-      posts: posts.map(serializePost),
+      posts,
+      reels,
       postCount,
       isFollowing,
+      isFriend,
+      isOwnProfile,
+      friendRequestPending,
+      friendRequestIncoming,
     });
   } catch (error) {
     return next(error);
@@ -236,6 +421,13 @@ const toggleFollow = async (req, res, next) => {
     const targetUser = await User.findById(targetUserId);
     if (!targetUser) {
       throw createHttpError(404, "User not found");
+    }
+
+    if (
+      isBlockedRelation(req.user, targetUserId) ||
+      isBlockedRelation(targetUser, currentUserId.toString())
+    ) {
+      throw createHttpError(403, "Action not allowed");
     }
 
     const currentUser = await User.findById(currentUserId);
@@ -262,6 +454,285 @@ const toggleFollow = async (req, res, next) => {
     return res.status(200).json({
       isFollowing: !isFollowing,
       followersCount: targetUser.followers.length,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const sendFriendRequest = async (req, res, next) => {
+  try {
+    const requesterId = req.user._id.toString();
+    const recipientId = req.params.userId;
+
+    if (requesterId === recipientId) {
+      throw createHttpError(400, "Cannot add yourself");
+    }
+
+    const [requester, recipient] = await Promise.all([
+      User.findById(requesterId),
+      User.findById(recipientId),
+    ]);
+
+    if (!requester || !recipient) {
+      throw createHttpError(404, "User not found");
+    }
+
+    if (
+      isBlockedRelation(requester, recipientId) ||
+      isBlockedRelation(recipient, requesterId)
+    ) {
+      throw createHttpError(403, "Action not allowed");
+    }
+
+    if (hasUserId(requester.friends, recipientId)) {
+      return res.status(200).json({ status: "friends" });
+    }
+
+    if (hasUserId(recipient.friendRequestsReceived, requesterId)) {
+      return res.status(200).json({ status: "pending" });
+    }
+
+    addUniqueUserId(recipient.friendRequestsReceived, requesterId);
+    addUniqueUserId(requester.friendRequestsSent, recipientId);
+
+    addUniqueUserId(recipient.followers, requesterId);
+    addUniqueUserId(requester.following, recipientId);
+
+    await Promise.all([requester.save(), recipient.save()]);
+
+    await createUserNotification({
+      userId: recipient._id,
+      type: "friend_request",
+      title: `${requester.name || "Someone"} sent you a friend request`,
+      body: "Accept to become friends.",
+      data: {
+        type: "friend_request",
+        fromUserId: requesterId,
+        fromUserName: requester.name || "",
+        status: "pending",
+      },
+      push: {
+        enabled: true,
+        tokens: recipient.expoPushTokens || [],
+        channelId: "messages",
+      },
+    });
+
+    return res.status(200).json({
+      status: "pending",
+      followersCount: recipient.followers.length,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const acceptFriendRequest = async (req, res, next) => {
+  try {
+    const recipientId = req.user._id.toString();
+    const requesterId = req.params.userId;
+
+    if (recipientId === requesterId) {
+      throw createHttpError(400, "Invalid friend request");
+    }
+
+    const requester = await User.findById(requesterId);
+    if (!requester) {
+      throw createHttpError(404, "User not found");
+    }
+
+    if (
+      isBlockedRelation(req.user, requesterId) ||
+      isBlockedRelation(requester, recipientId)
+    ) {
+      throw createHttpError(403, "Action not allowed");
+    }
+
+    const hasPendingRequest = hasUserId(
+      req.user.friendRequestsReceived,
+      requesterId,
+    );
+    if (!hasPendingRequest && !hasUserId(req.user.friends, requesterId)) {
+      throw createHttpError(400, "Friend request not found");
+    }
+
+    req.user.friendRequestsReceived = removeUserId(
+      req.user.friendRequestsReceived,
+      requesterId,
+    );
+    requester.friendRequestsSent = removeUserId(
+      requester.friendRequestsSent,
+      recipientId,
+    );
+
+    addUniqueUserId(req.user.friends, requesterId);
+    addUniqueUserId(requester.friends, recipientId);
+
+    addUniqueUserId(req.user.followers, requesterId);
+    addUniqueUserId(req.user.following, requesterId);
+    addUniqueUserId(requester.followers, recipientId);
+    addUniqueUserId(requester.following, recipientId);
+
+    await Promise.all([req.user.save(), requester.save()]);
+
+    const pendingNotification = await Notification.findOne({
+      user: req.user._id,
+      type: "friend_request",
+      "data.fromUserId": requesterId,
+      "data.status": "pending",
+    }).sort({ createdAt: -1 });
+
+    if (pendingNotification) {
+      pendingNotification.read = true;
+      pendingNotification.data = {
+        ...(pendingNotification.data || {}),
+        status: "accepted",
+      };
+      await pendingNotification.save();
+    }
+
+    await createUserNotification({
+      userId: requester._id,
+      type: "friend_request_accepted",
+      title: `${req.user.name || "Someone"} accepted your friend request`,
+      body: "You are now friends.",
+      data: {
+        type: "friend_request_accepted",
+        userId: recipientId,
+        userName: req.user.name || "",
+      },
+      push: {
+        enabled: true,
+        tokens: requester.expoPushTokens || [],
+        channelId: "messages",
+      },
+    });
+
+    return res.status(200).json({
+      status: "accepted",
+      friendsCount: req.user.friends.length,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getFriends = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.userId).populate(
+      "friends",
+      "name username avatarUrl bio",
+    );
+    if (!user) {
+      throw createHttpError(404, "User not found");
+    }
+
+    const friends = (user.friends || []).map((friend) => ({
+      id: friend._id.toString(),
+      name: friend.name,
+      username: friend.username || "",
+      avatarUrl: friend.avatarUrl || "",
+      bio: friend.bio || "",
+    }));
+
+    return res.status(200).json({ users: friends });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const unfriendUser = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id.toString();
+    const targetUserId = req.params.userId;
+
+    if (currentUserId === targetUserId) {
+      throw createHttpError(400, "Cannot unfriend yourself");
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      throw createHttpError(404, "User not found");
+    }
+
+    req.user.friends = removeUserId(req.user.friends, targetUserId);
+    targetUser.friends = removeUserId(targetUser.friends, currentUserId);
+
+    req.user.friendRequestsSent = removeUserId(
+      req.user.friendRequestsSent,
+      targetUserId,
+    );
+    req.user.friendRequestsReceived = removeUserId(
+      req.user.friendRequestsReceived,
+      targetUserId,
+    );
+    targetUser.friendRequestsSent = removeUserId(
+      targetUser.friendRequestsSent,
+      currentUserId,
+    );
+    targetUser.friendRequestsReceived = removeUserId(
+      targetUser.friendRequestsReceived,
+      currentUserId,
+    );
+
+    await Promise.all([req.user.save(), targetUser.save()]);
+
+    return res.status(200).json({
+      status: "unfriended",
+      friendsCount: req.user.friends.length,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const blockUser = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id.toString();
+    const targetUserId = req.params.userId;
+
+    if (currentUserId === targetUserId) {
+      throw createHttpError(400, "Cannot block yourself");
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      throw createHttpError(404, "User not found");
+    }
+
+    addUniqueUserId(req.user.blockedUsers, targetUserId);
+
+    req.user.friends = removeUserId(req.user.friends, targetUserId);
+    targetUser.friends = removeUserId(targetUser.friends, currentUserId);
+
+    req.user.following = removeUserId(req.user.following, targetUserId);
+    req.user.followers = removeUserId(req.user.followers, targetUserId);
+    targetUser.following = removeUserId(targetUser.following, currentUserId);
+    targetUser.followers = removeUserId(targetUser.followers, currentUserId);
+
+    req.user.friendRequestsSent = removeUserId(
+      req.user.friendRequestsSent,
+      targetUserId,
+    );
+    req.user.friendRequestsReceived = removeUserId(
+      req.user.friendRequestsReceived,
+      targetUserId,
+    );
+    targetUser.friendRequestsSent = removeUserId(
+      targetUser.friendRequestsSent,
+      currentUserId,
+    );
+    targetUser.friendRequestsReceived = removeUserId(
+      targetUser.friendRequestsReceived,
+      currentUserId,
+    );
+
+    await Promise.all([req.user.save(), targetUser.save()]);
+
+    return res.status(200).json({
+      status: "blocked",
+      blockedUserId: targetUserId,
     });
   } catch (error) {
     return next(error);
@@ -324,6 +795,11 @@ module.exports = {
   deleteAccount,
   searchUsers,
   getUserProfile,
+  sendFriendRequest,
+  acceptFriendRequest,
+  unfriendUser,
+  blockUser,
+  getFriends,
   toggleFollow,
   getFollowers,
   getFollowing,

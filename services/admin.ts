@@ -46,6 +46,35 @@ export interface AdminUserDetailsResponse {
   recentPosts: AdminPost[];
 }
 
+export interface AdminReport {
+  id: string;
+  reason: string;
+  description: string;
+  status: "open" | "reviewed";
+  createdAt: string;
+  reporter: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  post: {
+    id: string;
+    text: string;
+    imageUrl: string;
+    author: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+}
+
+export interface AdminSendNotificationPayload {
+  title: string;
+  body: string;
+  allUsers?: boolean;
+  userIds?: string[];
+}
+
 export interface AdminPost extends Post {
   status: "published";
   caption: string;
@@ -98,6 +127,44 @@ export async function fetchAdminUsers(): Promise<ApiResponse<AdminUser[]>> {
     }
 
     return { data: json.users };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
+export async function sendAdminNotification(
+  payload: AdminSendNotificationPayload,
+): Promise<ApiResponse<{ message: string; sentCount: number }>> {
+  try {
+    const headers = await getAdminHeaders(true);
+    if (!headers) return { error: "Session expired. Please sign in again." };
+
+    const requestBody: Record<string, unknown> = {
+      title: payload.title,
+      body: payload.body,
+      allUsers: Boolean(payload.allUsers),
+    };
+
+    if (
+      !payload.allUsers &&
+      Array.isArray(payload.userIds) &&
+      payload.userIds.length > 0
+    ) {
+      requestBody.userIds = payload.userIds;
+    }
+
+    const response = await fetch(`${BASE_URL}/api/admin/notifications`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    const json = await response.json();
+
+    if (!response.ok) {
+      return { error: json.message || "Failed to send notification" };
+    }
+
+    return { data: json };
   } catch (err: any) {
     return { error: err.message || "Network error" };
   }
@@ -209,6 +276,24 @@ export async function fetchAdminPosts(): Promise<ApiResponse<AdminPost[]>> {
     }
 
     return { data: json.posts };
+  } catch (err: any) {
+    return { error: err.message || "Network error" };
+  }
+}
+
+export async function fetchAdminReports(): Promise<ApiResponse<AdminReport[]>> {
+  try {
+    const headers = await getAdminHeaders();
+    if (!headers) return { error: "Session expired. Please sign in again." };
+
+    const response = await fetch(`${BASE_URL}/api/admin/reports`, { headers });
+    const json = await response.json();
+
+    if (!response.ok) {
+      return { error: json.message || "Failed to load reports" };
+    }
+
+    return { data: json.reports };
   } catch (err: any) {
     return { error: err.message || "Network error" };
   }
